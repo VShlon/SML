@@ -28,7 +28,6 @@ enum Tab: Hashable {
 
 
 
-@MainActor
 final class LocationState: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     static let shared = LocationState()
@@ -41,6 +40,7 @@ final class LocationState: NSObject, ObservableObject, CLLocationManagerDelegate
     private var lastLocation: CLLocation?
     private var lastUpdateAt: Date?
     private var hasRequestedAuthorization = false
+    private var isUpdatingLocation = false
 
     override private init() {
         super.init()
@@ -59,7 +59,7 @@ final class LocationState: NSObject, ObservableObject, CLLocationManagerDelegate
         case .authorizedAlways, .authorizedWhenInUse:
             requestLocationIfNeeded(force: false)
         case .denied:
-            presentAlert("Location access is blocked. Enable location access in Settings to use Workday at Shop.")
+            presentAlert("Location access is blocked. Enable location access to use Workday at Shop.")
         case .restricted:
             presentAlert("Location access is restricted on this device. Workday at Shop is unavailable.")
         @unknown default:
@@ -78,6 +78,8 @@ final class LocationState: NSObject, ObservableObject, CLLocationManagerDelegate
             return
         }
 
+        isUpdatingLocation = true
+        manager.startUpdatingLocation()
         manager.requestLocation()
     }
 
@@ -101,10 +103,7 @@ final class LocationState: NSObject, ObservableObject, CLLocationManagerDelegate
     }
 
     private func authorizationStatus() -> CLAuthorizationStatus {
-        if #available(iOS 14.0, *) {
-            return manager.authorizationStatus
-        }
-        return CLLocationManager.authorizationStatus()
+        manager.authorizationStatus
     }
 
     private func authorizationLabel(_ status: CLAuthorizationStatus) -> String {
@@ -124,7 +123,8 @@ final class LocationState: NSObject, ObservableObject, CLLocationManagerDelegate
         }
     }
 
-    private func presentAlert(_ message: String) {
+    @MainActor
+    private func setAlertState(message: String) {
         guard alertMessage != message || !showAlert else {
             return
         }
@@ -132,17 +132,32 @@ final class LocationState: NSObject, ObservableObject, CLLocationManagerDelegate
         showAlert = true
     }
 
-    private func markUpdated() {
+    private func presentAlert(_ message: String) {
+        Task { @MainActor in
+            self.setAlertState(message: message)
+        }
+    }
+
+    @MainActor
+    private func bumpRevision() {
         revision += 1
     }
 
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        let status = authorizationStatus()
+    private func markUpdated() {
+        Task { @MainActor in
+            self.bumpRevision()
+        }
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
         switch status {
         case .authorizedAlways, .authorizedWhenInUse:
-            requestLocationIfNeeded(force: true)
+            Task {
+                self.requestLocationIfNeeded(force: true)
+            }
         case .denied:
-            presentAlert("Location access is blocked. Enable location access in Settings to use Workday at Shop.")
+            presentAlert("Location access is blocked. Enable location access to use Workday at Shop.")
             markUpdated()
         case .restricted:
             presentAlert("Location access is restricted on this device. Workday at Shop is unavailable.")
@@ -154,19 +169,31 @@ final class LocationState: NSObject, ObservableObject, CLLocationManagerDelegate
         }
     }
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last else { return }
-        lastLocation = location
-        lastUpdateAt = Date()
-        markUpdated()
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last, location.horizontalAccuracy >= 0 else { return }
+        Task {
+            self.lastLocation = location
+            self.lastUpdateAt = Date()
+            if self.isUpdatingLocation {
+                self.isUpdatingLocation = false
+                manager.stopUpdatingLocation()
+            }
+            self.markUpdated()
+        }
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         let nsError = error as NSError
         if nsError.domain == kCLErrorDomain && nsError.code == CLError.denied.rawValue {
-            presentAlert("Location access is blocked. Enable location access in Settings to use Workday at Shop.")
+            presentAlert("Location access is blocked. Enable location access to use Workday at Shop.")
         }
-        markUpdated()
+        Task {
+            if self.isUpdatingLocation {
+                self.isUpdatingLocation = false
+                manager.stopUpdatingLocation()
+            }
+            self.markUpdated()
+        }
     }
 }
 

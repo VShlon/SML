@@ -206,7 +206,7 @@ extension WebView {
         private var lastInjectedToken: String = ""
         private var lastInjectedDeviceId: String = ""
         private var lastInjectedURL: String = ""
-        private var lastInjectedLocationRevision: Int = -1""
+        private var lastInjectedLocationRevision: Int = -1
 
         private var pendingCommand: WebNavigationCommand?
         private var lastHandledCommandId: UUID?
