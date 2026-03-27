@@ -43,6 +43,7 @@ struct SMLMoreRootView: View {
                         NotificationsView()
                     } label: {
                         row(system: "bell", title: "Notifications")
+                            .foregroundStyle(Color(uiColor: AppConfig.brandColor))
                     }
                 }
 
@@ -117,6 +118,7 @@ struct SMLMoreRootView: View {
             Text(title)
             Spacer()
         }
+        .foregroundStyle(Color(uiColor: AppConfig.brandColor))
     }
 
     private func rowCustomIcon(assetName: String, fallbackSystem: String, title: String) -> some View {
@@ -134,10 +136,11 @@ struct SMLMoreRootView: View {
             Text(title)
             Spacer()
         }
+        .foregroundStyle(Color(uiColor: AppConfig.brandColor))
     }
 
     private func openInMainWindow(_ url: URL) {
-        appNavigation.openInMainWindow(url)
+        appNavigation.openInMainWindow(url, keepCurrentTab: false)
         dismiss()
     }
 

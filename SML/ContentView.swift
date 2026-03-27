@@ -33,14 +33,15 @@ final class AppNavigationState: ObservableObject {
     struct OpenCommand: Equatable {
         let id: UUID
         let url: URL
+        let keepCurrentTab: Bool
     }
 
     @Published var openCommand: OpenCommand?
 
     private init() {}
 
-    func openInMainWindow(_ url: URL) {
-        openCommand = OpenCommand(id: UUID(), url: url)
+    func openInMainWindow(_ url: URL, keepCurrentTab: Bool = true) {
+        openCommand = OpenCommand(id: UUID(), url: url, keepCurrentTab: keepCurrentTab)
     }
 
     func consume(_ command: OpenCommand) {
@@ -69,11 +70,16 @@ struct ContentView: View {
     @State private var left2Token = UUID()
     @State private var centerToken = UUID()
     @State private var right1Token = UUID()
+    @State private var right2Token = UUID()
 
     @State private var left1Command: WebNavigationCommand? = nil
     @State private var left2Command: WebNavigationCommand? = nil
     @State private var centerCommand: WebNavigationCommand? = nil
     @State private var right1Command: WebNavigationCommand? = nil
+    @State private var right2Command: WebNavigationCommand? = nil
+
+    @State private var right2URL: URL = AppConfig.siteURL
+    @State private var isRight2HostingPage: Bool = false
 
     @State private var suppressReloadOnce: Bool = false
     @State private var needsHomeRefreshAfterExternal: Bool = false
@@ -99,7 +105,7 @@ struct ContentView: View {
                     .tabItem { tabLabel(spec) }
             }
 
-            Color.clear
+            moreTabBody()
                 .tag(Tab.right2)
                 .tabItem {
                     Label { Text("") } icon: { Image(systemName: "ellipsis") }
@@ -146,6 +152,10 @@ struct ContentView: View {
             activatedTabs.insert(newTab)
 
             if newTab == .right2 {
+                if isRight2HostingPage {
+                    return
+                }
+
                 showMoreSheet = true
                 suppressReloadOnce = true
                 selected = lastNonMoreTab
@@ -320,6 +330,22 @@ struct ContentView: View {
         )
     }
 
+    @ViewBuilder
+    private func moreTabBody() -> some View {
+        if isRight2HostingPage {
+            LazyTabContainer(
+                isActivated: activatedTabs.contains(.right2),
+                url: right2URL,
+                apnsToken: push.apnsToken,
+                deviceId: push.deviceId,
+                command: right2Command,
+                token: right2Token
+            )
+        } else {
+            Color.clear
+        }
+    }
+
     // MARK: - Tab labels
 
     private func tabLabel(_ spec: TabSpec) -> some View {
@@ -390,12 +416,19 @@ struct ContentView: View {
     private func resetLeft2ToRoot() { left2Command = nil; left2Token = UUID() }
     private func resetCenterToRoot() { centerCommand = nil; centerToken = UUID() }
     private func resetRight1ToRoot() { right1Command = nil; right1Token = UUID() }
+    private func resetRight2ToRoot() {
+        right2Command = nil
+        right2URL = AppConfig.siteURL
+        isRight2HostingPage = false
+        right2Token = UUID()
+    }
 
     private func resetAllTabsToRoot() {
         resetLeft1ToRoot()
         resetLeft2ToRoot()
         resetCenterToRoot()
         resetRight1ToRoot()
+        resetRight2ToRoot()
     }
 
     private func resetTabToRoot(_ tab: Tab) {
@@ -404,7 +437,7 @@ struct ContentView: View {
         case .left2:  resetLeft2ToRoot()
         case .center: resetCenterToRoot()
         case .right1: resetRight1ToRoot()
-        case .right2: break
+        case .right2: resetRight2ToRoot()
         }
     }
 
@@ -433,7 +466,119 @@ struct ContentView: View {
     }
 
     private func routeFromMainWindowRequest(_ cmd: AppNavigationState.OpenCommand, mode: RoleState.Mode) {
-        routeToURL(cmd.url, commandId: cmd.id, mode: mode)
+        if cmd.keepCurrentTab {
+            routeToURLInCurrentTab(cmd.url, commandId: cmd.id)
+        } else {
+            routeToURLFromMoreMenu(cmd.url, commandId: cmd.id, mode: mode)
+        }
+    }
+
+    private func routeToURLInCurrentTab(_ url: URL, commandId: UUID) {
+        left1Command = nil
+        left2Command = nil
+        centerCommand = nil
+        right1Command = nil
+
+        if showMoreSheet {
+            showMoreSheet = false
+        }
+
+        let scheme = (url.scheme ?? "").lowercased()
+        if scheme != "http" && scheme != "https" {
+            openExternally(url)
+            return
+        }
+
+        if isExternalURL(url) {
+            openExternally(url)
+            return
+        }
+
+        let target: Tab = {
+            if selected == .right2 {
+                return isRight2HostingPage ? .right2 : lastNonMoreTab
+            }
+            return selected
+        }()
+
+        activatedTabs.insert(target)
+
+        if selected != target {
+            suppressReloadOnce = true
+            selected = target
+        }
+
+        lastNonMoreTab = target
+
+        let nav = WebNavigationCommand(id: commandId, url: url)
+
+        switch target {
+        case .left1:
+            left1Command = nav
+        case .left2:
+            left2Command = nav
+        case .center:
+            centerCommand = nav
+        case .right1:
+            right1Command = nav
+        case .right2:
+            right2URL = url
+            right2Command = nav
+            isRight2HostingPage = true
+        }
+    }
+
+    private func routeToURLFromMoreMenu(_ url: URL, commandId: UUID, mode: RoleState.Mode) {
+        left1Command = nil
+        left2Command = nil
+        centerCommand = nil
+        right1Command = nil
+        right2Command = nil
+
+        if showMoreSheet {
+            showMoreSheet = false
+        }
+
+        let scheme = (url.scheme ?? "").lowercased()
+        if scheme != "http" && scheme != "https" {
+            openExternally(url)
+            return
+        }
+
+        if isExternalURL(url) {
+            openExternally(url)
+            return
+        }
+
+        let nav = WebNavigationCommand(id: commandId, url: url)
+
+        if let target = explicitTabTarget(for: url.path.lowercased(), mode: mode) {
+            suppressReloadOnce = true
+            activatedTabs.insert(target)
+            selected = target
+            lastNonMoreTab = target
+            isRight2HostingPage = false
+
+            switch target {
+            case .left1:
+                left1Command = nav
+            case .left2:
+                left2Command = nav
+            case .center:
+                centerCommand = nav
+            case .right1:
+                right1Command = nav
+            case .right2:
+                break
+            }
+            return
+        }
+
+        right2URL = url
+        right2Command = nav
+        isRight2HostingPage = true
+        activatedTabs.insert(.right2)
+        selected = .right2
     }
 
     private func routeToURL(_ url: URL, commandId: UUID, mode: RoleState.Mode) {
@@ -476,6 +621,46 @@ struct ContentView: View {
         case .center: centerCommand = nav
         case .right1: right1Command = nav
         case .right2: break
+        }
+    }
+
+    private func explicitTabTarget(for path: String, mode: RoleState.Mode) -> Tab? {
+        switch mode {
+        case .guest, .client:
+            if path.contains("/services") { return .left2 }
+            if path.contains("/contact") { return .center }
+            if path.contains("/projects") { return .right1 }
+            return nil
+
+        case .worker:
+            if path.contains("/account-workday") { return .left2 }
+            if path.contains("/tasks-today") { return .center }
+            if path.contains("/account-report") { return .right1 }
+            return nil
+
+        case .accountant:
+            if path.contains("/monthly-billing") { return .left2 }
+            if path.contains("/account-workday") { return .center }
+            if path.contains("/workers-time") { return .right1 }
+            return nil
+
+        case .administrator, .manager, .owner:
+            if path.contains("/create-task") { return .left2 }
+            if path.contains("/all-tasks") { return .right1 }
+            if path.contains("/workspace") ||
+                path.contains("/groups") ||
+                path.contains("/all-workers") ||
+                path.contains("/all-clients") ||
+                path.contains("/client-details") ||
+                path.contains("/task-history") ||
+                path.contains("/reports") ||
+                path.contains("/snow-control") ||
+                path.contains("/workers-time") ||
+                path.contains("/monthly-billing") ||
+                path.contains("/payroll-review") {
+                return .center
+            }
+            return nil
         }
     }
 
@@ -636,11 +821,11 @@ private struct TabBarReselectDetector: UIViewControllerRepresentable {
         Coordinator(onReselect: onReselect)
     }
 
-    final class Coordinator: NSObject, UITabBarControllerDelegate {
+    final class Coordinator: NSObject, UITabBarControllerDelegate, UITabBarDelegate {
 
         private let onReselect: (Tab) -> Void
         private weak var tabBarController: UITabBarController?
-        private var lastIndex: Int?
+        private var currentSelectedIndex: Int?
 
         init(onReselect: @escaping (Tab) -> Void) {
             self.onReselect = onReselect
@@ -657,7 +842,8 @@ private struct TabBarReselectDetector: UIViewControllerRepresentable {
                     if let tbc = parent as? UITabBarController {
                         self.tabBarController = tbc
                         tbc.delegate = self
-                        self.lastIndex = tbc.selectedIndex
+                        tbc.tabBar.delegate = self
+                        self.currentSelectedIndex = tbc.selectedIndex
                         return
                     }
                     p = parent
@@ -665,14 +851,15 @@ private struct TabBarReselectDetector: UIViewControllerRepresentable {
             }
         }
 
-        func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
-            let idx = tabBarController.selectedIndex
-
-            if let last = lastIndex, last == idx {
+        func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+            guard let idx = tabBar.items?.firstIndex(of: item) else { return }
+            if let currentSelectedIndex, currentSelectedIndex == idx {
                 onReselect(mapIndexToTab(idx))
             }
+        }
 
-            lastIndex = idx
+        func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
+            currentSelectedIndex = tabBarController.selectedIndex
         }
 
         private func mapIndexToTab(_ idx: Int) -> Tab {

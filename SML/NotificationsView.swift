@@ -21,6 +21,8 @@ struct NotificationsView: View {
     @State private var permissionStatus: String = "Checking..."
     @State private var isWorking = false
 
+    private let brandColor = AppConfig.brandColorSwiftUI
+
     var body: some View {
         List {
             Section {
@@ -55,6 +57,7 @@ struct NotificationsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .tint(brandColor)
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refreshStatus() }
@@ -93,7 +96,7 @@ struct NotificationsView: View {
     private func statusColor() -> Color {
         switch permissionStatus {
         case "Enabled", "Provisional":
-            return .green
+            return brandColor
         case "Disabled":
             return .red
         default:
