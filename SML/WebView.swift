@@ -71,14 +71,7 @@ final class WebViewController: UIViewController {
 
     private var didLoadInitial = false
     private var currentRequestURL: URL?
-    private var loadTimeoutWorkItem: DispatchWorkItem?
 
-    private let overlayView = UIView()
-    private let overlayStack = UIStackView()
-    private let spinner = UIActivityIndicatorView(style: .large)
-    private let titleLabel = UILabel()
-    private let messageLabel = UILabel()
-    private let retryButton = UIButton(type: .system)
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -130,58 +123,12 @@ final class WebViewController: UIViewController {
         wv.scrollView.backgroundColor = .systemBackground
 
         self.webView = wv
-        configureOverlay()
-        showLoadingOverlay(title: "Loading...", message: "Please wait a moment.", showRetry: false)
         loadInitialIfNeeded()
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         loadInitialIfNeeded()
-    }
-
-    private func configureOverlay() {
-        overlayView.translatesAutoresizingMaskIntoConstraints = false
-        overlayView.backgroundColor = .systemBackground
-        overlayView.isUserInteractionEnabled = true
-
-        overlayStack.translatesAutoresizingMaskIntoConstraints = false
-        overlayStack.axis = .vertical
-        overlayStack.alignment = .center
-        overlayStack.spacing = 14
-
-        spinner.hidesWhenStopped = false
-        spinner.startAnimating()
-
-        titleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
-        titleLabel.textColor = .label
-        titleLabel.textAlignment = .center
-
-        messageLabel.font = .systemFont(ofSize: 14, weight: .regular)
-        messageLabel.textColor = .secondaryLabel
-        messageLabel.textAlignment = .center
-        messageLabel.numberOfLines = 0
-
-        retryButton.configuration = .plain()
-        retryButton.setTitle("Retry", for: .normal)
-        retryButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
-        retryButton.isHidden = true
-
-        view.addSubview(overlayView)
-        overlayView.addSubview(overlayStack)
-        [spinner, titleLabel, messageLabel, retryButton].forEach { overlayStack.addArrangedSubview($0) }
-
-        NSLayoutConstraint.activate([
-            overlayView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            overlayView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            overlayView.topAnchor.constraint(equalTo: view.topAnchor),
-            overlayView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-
-            overlayStack.centerXAnchor.constraint(equalTo: overlayView.centerXAnchor),
-            overlayStack.centerYAnchor.constraint(equalTo: overlayView.centerYAnchor),
-            overlayStack.leadingAnchor.constraint(greaterThanOrEqualTo: overlayView.leadingAnchor, constant: 24),
-            overlayStack.trailingAnchor.constraint(lessThanOrEqualTo: overlayView.trailingAnchor, constant: -24)
-        ])
     }
 
     private func loadInitialIfNeeded() {
@@ -201,70 +148,6 @@ final class WebViewController: UIViewController {
         } else {
             load(url: base, in: wv)
         }
-    }
-
-    fileprivate func load(url: URL, in webView: WKWebView? = nil) {
-        guard let wv = webView ?? self.webView else { return }
-        currentRequestURL = url
-        showLoadingOverlay(title: "Loading...", message: "Please wait a moment.", showRetry: false)
-        beginLoadTimeout()
-        wv.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20))
-    }
-
-    fileprivate func handleNavigationStart() {
-        showLoadingOverlay(title: "Loading...", message: "Please wait a moment.", showRetry: false)
-        beginLoadTimeout()
-    }
-
-    fileprivate func handleNavigationFinished() {
-        cancelLoadTimeout()
-        hideLoadingOverlay()
-    }
-
-    fileprivate func handleNavigationFailure(message: String) {
-        cancelLoadTimeout()
-        showLoadingOverlay(title: "Could not open page", message: message, showRetry: true)
-    }
-
-    private func beginLoadTimeout() {
-        cancelLoadTimeout()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.showLoadingOverlay(
-                title: "Still loading...",
-                message: "The page is taking too long to respond. You can retry.",
-                showRetry: true
-            )
-        }
-        loadTimeoutWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: work)
-    }
-
-    private func cancelLoadTimeout() {
-        loadTimeoutWorkItem?.cancel()
-        loadTimeoutWorkItem = nil
-    }
-
-    private func showLoadingOverlay(title: String, message: String, showRetry: Bool) {
-        titleLabel.text = title
-        messageLabel.text = message
-        retryButton.isHidden = !showRetry
-        if showRetry {
-            spinner.stopAnimating()
-        } else {
-            spinner.startAnimating()
-        }
-        overlayView.isHidden = false
-        view.bringSubviewToFront(overlayView)
-    }
-
-    private func hideLoadingOverlay() {
-        overlayView.isHidden = true
-    }
-
-    @objc private func retryTapped() {
-        guard let target = currentRequestURL ?? initialURL ?? AppConfig.siteURL as URL? else { return }
-        load(url: target)
     }
 
     fileprivate func load(url: URL, in webView: WKWebView? = nil) {
