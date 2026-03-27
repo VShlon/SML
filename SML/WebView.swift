@@ -11,6 +11,7 @@
 //  - Role bridge через whoami.
 //  - Корректная обработка внутренних, внешних и системных ссылок.
 //  - iPad показывает мобильную версию сайта.
+//  - Есть нативный loading / timeout / retry, чтобы app не выглядел зависшим.
 //
 
 import SwiftUI
@@ -34,6 +35,7 @@ struct WebView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> WebViewController {
         let vc = WebViewController()
         vc.coordinator = context.coordinator
+        context.coordinator.hostController = vc
 
         context.coordinator.setCurrent(apnsToken: apnsToken, deviceId: deviceId)
         context.coordinator.setCommand(command)
@@ -45,6 +47,8 @@ struct WebView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ vc: WebViewController, context: Context) {
+        vc.coordinator = context.coordinator
+        context.coordinator.hostController = vc
         context.coordinator.setCurrent(apnsToken: apnsToken, deviceId: deviceId)
         context.coordinator.setCommand(command)
 
@@ -66,9 +70,19 @@ final class WebViewController: UIViewController {
     fileprivate var initialCommand: WebNavigationCommand?
 
     private var didLoadInitial = false
+    private var currentRequestURL: URL?
+    private var loadTimeoutWorkItem: DispatchWorkItem?
+
+    private let overlayView = UIView()
+    private let overlayStack = UIStackView()
+    private let spinner = UIActivityIndicatorView(style: .large)
+    private let titleLabel = UILabel()
+    private let messageLabel = UILabel()
+    private let retryButton = UIButton(type: .system)
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = .systemBackground
 
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
@@ -116,12 +130,58 @@ final class WebViewController: UIViewController {
         wv.scrollView.backgroundColor = .systemBackground
 
         self.webView = wv
+        configureOverlay()
+        showLoadingOverlay(title: "Loading...", message: "Please wait a moment.", showRetry: false)
         loadInitialIfNeeded()
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         loadInitialIfNeeded()
+    }
+
+    private func configureOverlay() {
+        overlayView.translatesAutoresizingMaskIntoConstraints = false
+        overlayView.backgroundColor = .systemBackground
+        overlayView.isUserInteractionEnabled = true
+
+        overlayStack.translatesAutoresizingMaskIntoConstraints = false
+        overlayStack.axis = .vertical
+        overlayStack.alignment = .center
+        overlayStack.spacing = 14
+
+        spinner.hidesWhenStopped = false
+        spinner.startAnimating()
+
+        titleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
+        titleLabel.textColor = .label
+        titleLabel.textAlignment = .center
+
+        messageLabel.font = .systemFont(ofSize: 14, weight: .regular)
+        messageLabel.textColor = .secondaryLabel
+        messageLabel.textAlignment = .center
+        messageLabel.numberOfLines = 0
+
+        retryButton.configuration = .plain()
+        retryButton.setTitle("Retry", for: .normal)
+        retryButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
+        retryButton.isHidden = true
+
+        view.addSubview(overlayView)
+        overlayView.addSubview(overlayStack)
+        [spinner, titleLabel, messageLabel, retryButton].forEach { overlayStack.addArrangedSubview($0) }
+
+        NSLayoutConstraint.activate([
+            overlayView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            overlayView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            overlayView.topAnchor.constraint(equalTo: view.topAnchor),
+            overlayView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            overlayStack.centerXAnchor.constraint(equalTo: overlayView.centerXAnchor),
+            overlayStack.centerYAnchor.constraint(equalTo: overlayView.centerYAnchor),
+            overlayStack.leadingAnchor.constraint(greaterThanOrEqualTo: overlayView.leadingAnchor, constant: 24),
+            overlayStack.trailingAnchor.constraint(lessThanOrEqualTo: overlayView.trailingAnchor, constant: -24)
+        ])
     }
 
     private func loadInitialIfNeeded() {
@@ -134,19 +194,85 @@ final class WebViewController: UIViewController {
         if let cmd = initialCommand {
             coordinator.markCommandHandled(cmd.id)
             if coordinator.shouldOpenExternally(cmd.url) {
-                wv.load(URLRequest(url: base))
+                load(url: base, in: wv)
             } else {
-                wv.load(URLRequest(url: cmd.url))
+                load(url: cmd.url, in: wv)
             }
         } else {
-            wv.load(URLRequest(url: base))
+            load(url: base, in: wv)
         }
+    }
+
+    fileprivate func load(url: URL, in webView: WKWebView? = nil) {
+        guard let wv = webView ?? self.webView else { return }
+        currentRequestURL = url
+        showLoadingOverlay(title: "Loading...", message: "Please wait a moment.", showRetry: false)
+        beginLoadTimeout()
+        wv.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20))
+    }
+
+    fileprivate func handleNavigationStart() {
+        showLoadingOverlay(title: "Loading...", message: "Please wait a moment.", showRetry: false)
+        beginLoadTimeout()
+    }
+
+    fileprivate func handleNavigationFinished() {
+        cancelLoadTimeout()
+        hideLoadingOverlay()
+    }
+
+    fileprivate func handleNavigationFailure(message: String) {
+        cancelLoadTimeout()
+        showLoadingOverlay(title: "Could not open page", message: message, showRetry: true)
+    }
+
+    private func beginLoadTimeout() {
+        cancelLoadTimeout()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.showLoadingOverlay(
+                title: "Still loading...",
+                message: "The page is taking too long to respond. You can retry.",
+                showRetry: true
+            )
+        }
+        loadTimeoutWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: work)
+    }
+
+    private func cancelLoadTimeout() {
+        loadTimeoutWorkItem?.cancel()
+        loadTimeoutWorkItem = nil
+    }
+
+    private func showLoadingOverlay(title: String, message: String, showRetry: Bool) {
+        titleLabel.text = title
+        messageLabel.text = message
+        retryButton.isHidden = !showRetry
+        if showRetry {
+            spinner.stopAnimating()
+        } else {
+            spinner.startAnimating()
+        }
+        overlayView.isHidden = false
+        view.bringSubviewToFront(overlayView)
+    }
+
+    private func hideLoadingOverlay() {
+        overlayView.isHidden = true
+    }
+
+    @objc private func retryTapped() {
+        guard let target = currentRequestURL ?? initialURL ?? AppConfig.siteURL as URL? else { return }
+        load(url: target)
     }
 }
 
 extension WebView {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+
+        weak var hostController: WebViewController?
 
         private var currentToken: String = ""
         private var currentDeviceId: String = ""
@@ -244,11 +370,7 @@ extension WebView {
 
             if shouldOpenExternally(cmd.url) { return }
 
-            if webView.url == cmd.url {
-                webView.reload()
-            } else {
-                webView.load(URLRequest(url: cmd.url))
-            }
+            hostController?.load(url: cmd.url, in: webView)
         }
 
         func webView(_ webView: WKWebView,
@@ -287,14 +409,19 @@ extension WebView {
             if shouldOpenExternally(u) {
                 openExternally(u)
             } else {
-                webView.load(navigationAction.request)
+                hostController?.load(url: u, in: webView)
             }
 
             return nil
         }
 
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            hostController?.handleNavigationStart()
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             didFinishOnce = true
+            hostController?.handleNavigationFinished()
 
             DispatchQueue.main.async { [weak self, weak webView] in
                 guard let self, let webView else { return }
@@ -304,6 +431,18 @@ extension WebView {
                 self.requestWhoamiViaWebView(webView: webView)
                 self.syncCookiesToSharedStorage(webView: webView)
             }
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            hostController?.handleNavigationFailure(message: error.localizedDescription)
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            hostController?.handleNavigationFailure(message: error.localizedDescription)
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            hostController?.handleNavigationFailure(message: "The page process stopped. Tap Retry.")
         }
 
         private func requestWhoamiViaWebView(webView: WKWebView) {

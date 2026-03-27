@@ -237,34 +237,39 @@ final class RoleState: ObservableObject {
 
     private static func extractBridgeSource(from payload: Any?) -> BridgeSource {
         if let dict = payload as? [String: Any] {
-            return extractBridgeSource(from: NSDictionary(dictionary: dict))
+            if let raw = dict["role_source"] as? String {
+                return parseBridgeSource(raw)
+            }
+
+            if let raw = dict["source"] as? String {
+                return parseBridgeSource(raw)
+            }
+
+            return .unknown
         }
 
         if let dict = payload as? NSDictionary {
             if let raw = dict["role_source"] as? String {
-                switch raw.lowercased() {
-                case "dom":
-                    return .dom
-                case "whoami":
-                    return .whoami
-                default:
-                    return .unknown
-                }
+                return parseBridgeSource(raw)
             }
 
             if let raw = dict["source"] as? String {
-                switch raw.lowercased() {
-                case "dom":
-                    return .dom
-                case "whoami":
-                    return .whoami
-                default:
-                    return .unknown
-                }
+                return parseBridgeSource(raw)
             }
         }
 
         return .unknown
+    }
+
+    private static func parseBridgeSource(_ raw: String) -> BridgeSource {
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "dom":
+            return .dom
+        case "whoami":
+            return .whoami
+        default:
+            return .unknown
+        }
     }
 
     private static func extractRole(from payload: Any?) -> String? {
@@ -326,7 +331,28 @@ final class RoleState: ObservableObject {
 
     private static func payloadExplicitlyRepresentsGuest(_ payload: Any?) -> Bool {
         if let dict = payload as? [String: Any] {
-            return payloadExplicitlyRepresentsGuest(NSDictionary(dictionary: dict))
+            let boolKeys = [
+                "logged_in", "is_logged_in", "authenticated", "is_authenticated",
+                "loggedIn", "isLoggedIn", "authenticatedUser"
+            ]
+
+            for key in boolKeys {
+                if let flag = dict[key] as? Bool, flag == false {
+                    return true
+                }
+            }
+
+            if let role = dict["role"] as? String, role.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if let loggedIn = dict["loggedIn"] as? Bool, loggedIn {
+                    return false
+                }
+                return true
+            }
+
+            let nestedKeys = ["user", "data", "result", "whoami", "account", "meta"]
+            for key in nestedKeys where payloadExplicitlyRepresentsGuest(dict[key]) {
+                return true
+            }
         }
 
         if let dict = payload as? NSDictionary {
