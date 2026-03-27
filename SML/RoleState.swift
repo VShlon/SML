@@ -79,7 +79,7 @@ final class RoleState: ObservableObject {
         let source = Self.extractBridgeSource(from: payload)
 
         if let resolved = Self.extractRole(from: payload) {
-            if resolved == "guest", !shouldAcceptGuestTransition(from: source) {
+            if resolved == "guest", !shouldAcceptGuestTransition(from: source, payload: payload) {
                 return
             }
 
@@ -87,7 +87,7 @@ final class RoleState: ObservableObject {
             return
         }
 
-        if Self.payloadExplicitlyRepresentsGuest(payload), shouldAcceptGuestTransition(from: source) {
+        if Self.payloadExplicitlyRepresentsGuest(payload), shouldAcceptGuestTransition(from: source, payload: payload) {
             applyResolvedRole("guest")
         }
     }
@@ -114,7 +114,7 @@ final class RoleState: ObservableObject {
 
                 if let http = resp as? HTTPURLResponse {
                     if http.statusCode == 401 || http.statusCode == 403 {
-                        self.applyResolvedRole("guest")
+                        self.lastError = "whoami HTTP \(http.statusCode)"
                         return
                     }
 
@@ -222,16 +222,16 @@ final class RoleState: ObservableObject {
         case whoami
     }
 
-    private func shouldAcceptGuestTransition(from source: BridgeSource) -> Bool {
+    private func shouldAcceptGuestTransition(from source: BridgeSource, payload: Any? = nil) -> Bool {
         if mode == .guest {
             return true
         }
 
         switch source {
         case .whoami:
-            return true
-        case .dom, .unknown:
             return false
+        case .dom, .unknown:
+            return Self.payloadClearlyRepresentsLoggedOutScreen(payload)
         }
     }
 
@@ -327,6 +327,48 @@ final class RoleState: ObservableObject {
         default:
             return nil
         }
+    }
+
+
+    private static func payloadClearlyRepresentsLoggedOutScreen(_ payload: Any?) -> Bool {
+        let dict: [String: Any]
+        if let payload = payload as? [String: Any] {
+            dict = payload
+        } else if let payload = payload as? NSDictionary {
+            var mapped: [String: Any] = [:]
+            payload.forEach { key, value in
+                if let key = key as? String {
+                    mapped[key] = value
+                }
+            }
+            dict = mapped
+        } else {
+            return false
+        }
+
+        let path = (dict["path"] as? String ?? dict["href"] as? String ?? "").lowercased()
+        if path.contains("/login") || path.contains("/register") || path.contains("/forgot-password") || path.contains("/reset-password") {
+            return true
+        }
+
+        let bodyClass = (dict["body_class"] as? String ?? dict["bodyClass"] as? String ?? "").lowercased()
+        if bodyClass.contains("page-template-page-login")
+            || bodyClass.contains("page-template-page-register")
+            || bodyClass.contains("page-template-page-forgot-password")
+            || bodyClass.contains("page-template-page-reset-password") {
+            return true
+        }
+
+        if let loggedIn = dict["loggedIn"] as? Bool, loggedIn == false {
+            if path.contains("/account") || path.contains("/login") || path.contains("/register") || path.contains("/forgot-password") || path.contains("/reset-password") {
+                return true
+            }
+            if bodyClass.contains("logged-in") {
+                return false
+            }
+        }
+
+        return false
     }
 
     private static func payloadExplicitlyRepresentsGuest(_ payload: Any?) -> Bool {

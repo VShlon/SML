@@ -29,6 +29,7 @@ struct WebView: UIViewControllerRepresentable {
     let apnsToken: String
     let deviceId: String
     let command: WebNavigationCommand?
+    let locationRevision: Int
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -37,7 +38,7 @@ struct WebView: UIViewControllerRepresentable {
         vc.coordinator = context.coordinator
         context.coordinator.hostController = vc
 
-        context.coordinator.setCurrent(apnsToken: apnsToken, deviceId: deviceId)
+        context.coordinator.setCurrent(apnsToken: apnsToken, deviceId: deviceId, locationRevision: locationRevision)
         context.coordinator.setCommand(command)
 
         vc.initialURL = url
@@ -49,7 +50,7 @@ struct WebView: UIViewControllerRepresentable {
     func updateUIViewController(_ vc: WebViewController, context: Context) {
         vc.coordinator = context.coordinator
         context.coordinator.hostController = vc
-        context.coordinator.setCurrent(apnsToken: apnsToken, deviceId: deviceId)
+        context.coordinator.setCurrent(apnsToken: apnsToken, deviceId: deviceId, locationRevision: locationRevision)
         context.coordinator.setCommand(command)
 
         if let wv = vc.webView {
@@ -200,10 +201,12 @@ extension WebView {
 
         private var currentToken: String = ""
         private var currentDeviceId: String = ""
+        private var currentLocationRevision: Int = 0
 
         private var lastInjectedToken: String = ""
         private var lastInjectedDeviceId: String = ""
         private var lastInjectedURL: String = ""
+        private var lastInjectedLocationRevision: Int = -1""
 
         private var pendingCommand: WebNavigationCommand?
         private var lastHandledCommandId: UUID?
@@ -227,9 +230,10 @@ extension WebView {
 
         private let cookieWorkQueue = DispatchQueue.global(qos: .utility)
 
-        func setCurrent(apnsToken: String, deviceId: String) {
+        func setCurrent(apnsToken: String, deviceId: String, locationRevision: Int) {
             currentToken = apnsToken.trimmingCharacters(in: .whitespacesAndNewlines)
             currentDeviceId = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
+            currentLocationRevision = locationRevision
         }
 
         func setCommand(_ command: WebNavigationCommand?) {
@@ -384,12 +388,21 @@ extension WebView {
             hostController?.handleNavigationCommitted()
         }
 
+        private func pageRequiresNativeLocation(_ webView: WKWebView) -> Bool {
+            let path = webView.url?.path.lowercased() ?? ""
+            return path.contains("/account-workday")
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             didFinishOnce = true
             hostController?.handleNavigationFinished()
 
             DispatchQueue.main.async { [weak self, weak webView] in
                 guard let self, let webView else { return }
+
+                if self.pageRequiresNativeLocation(webView) {
+                    LocationState.shared.prepareForWorkdayPage()
+                }
 
                 self.applyCommandIfNeeded(webView: webView)
                 self.tryInjectIntoPage(webView: webView, force: true)
@@ -516,16 +529,21 @@ extension WebView {
             let device = currentDeviceId.isEmpty ? "ios-device" : currentDeviceId
             let page = webView.url?.absoluteString ?? ""
 
+            let locationPayload = LocationState.shared.bridgePayload()
+            let locationRevision = currentLocationRevision
+
             if !force &&
                 token == lastInjectedToken &&
                 device == lastInjectedDeviceId &&
-                page == lastInjectedURL {
+                page == lastInjectedURL &&
+                locationRevision == lastInjectedLocationRevision {
                 return
             }
 
             lastInjectedToken = token
             lastInjectedDeviceId = device
             lastInjectedURL = page
+            lastInjectedLocationRevision = locationRevision
 
             let tokenJS = jsString(token)
             let deviceJS = jsString(device)
@@ -533,6 +551,7 @@ extension WebView {
             let appVersionJS = jsString(AppConfig.appVersion)
             let buildNumberJS = jsString(AppConfig.buildNumber)
             let environmentJS = jsString(AppConfig.pushEnvironment)
+            let locationJS = jsObjectString(locationPayload)
             let cssJS = jsString("input, textarea, [contenteditable=\"true\"] { caret-color: #438239 !important; }")
 
             let js = """
@@ -544,8 +563,10 @@ extension WebView {
               window.SML_APP.appVersion = \(appVersionJS);
               window.SML_APP.buildNumber = \(buildNumberJS);
               window.SML_APP.pushEnvironment = \(environmentJS);
+              window.SML_APP.location = \(locationJS);
               window.SML_APP.__injectedAt = Date.now();
 
+              window.SML_LOCATION = \(locationJS);
               window.SML_PUSH_TOKEN = \(tokenJS);
               window.SML_PUSH_DEVICE_ID = \(deviceJS);
 
@@ -586,6 +607,15 @@ extension WebView {
             if str.hasPrefix("[") && str.hasSuffix("]") {
                 str.removeFirst()
                 str.removeLast()
+            }
+            return str
+        }
+
+        private func jsObjectString(_ value: Any) -> String {
+            guard JSONSerialization.isValidJSONObject(value),
+                  let data = try? JSONSerialization.data(withJSONObject: value, options: []),
+                  let str = String(data: data, encoding: .utf8) else {
+                return "{}"
             }
             return str
         }

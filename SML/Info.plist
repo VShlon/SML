@@ -8,5 +8,7 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Allow location access to start and end the workday at Shop.</string>
 </dict>
 </plist>

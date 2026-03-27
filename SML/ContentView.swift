@@ -15,6 +15,7 @@
 import SwiftUI
 import UIKit
 import LocalAuthentication
+import CoreLocation
 
 enum Tab: Hashable {
     case left1
@@ -24,6 +25,150 @@ enum Tab: Hashable {
     case right2
 }
 
+
+
+
+@MainActor
+final class LocationState: NSObject, ObservableObject, CLLocationManagerDelegate {
+
+    static let shared = LocationState()
+
+    @Published private(set) var revision: Int = 0
+    @Published var alertMessage: String = ""
+    @Published var showAlert: Bool = false
+
+    private let manager = CLLocationManager()
+    private var lastLocation: CLLocation?
+    private var lastUpdateAt: Date?
+    private var hasRequestedAuthorization = false
+
+    override private init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+    }
+
+    func prepareForWorkdayPage() {
+        let status = authorizationStatus()
+        switch status {
+        case .notDetermined:
+            if !hasRequestedAuthorization {
+                hasRequestedAuthorization = true
+                manager.requestWhenInUseAuthorization()
+            }
+        case .authorizedAlways, .authorizedWhenInUse:
+            requestLocationIfNeeded(force: false)
+        case .denied:
+            presentAlert("Location access is blocked. Enable location access in Settings to use Workday at Shop.")
+        case .restricted:
+            presentAlert("Location access is restricted on this device. Workday at Shop is unavailable.")
+        @unknown default:
+            break
+        }
+    }
+
+    func requestLocationIfNeeded(force: Bool) {
+        let status = authorizationStatus()
+        guard status == .authorizedAlways || status == .authorizedWhenInUse else {
+            prepareForWorkdayPage()
+            return
+        }
+
+        if !force, let lastUpdateAt, Date().timeIntervalSince(lastUpdateAt) < 20, lastLocation != nil {
+            return
+        }
+
+        manager.requestLocation()
+    }
+
+    func bridgePayload() -> [String: Any] {
+        let status = authorizationStatus()
+        var payload: [String: Any] = [
+            "authorization": authorizationLabel(status),
+            "available": status == .authorizedAlways || status == .authorizedWhenInUse
+        ]
+
+        if let location = lastLocation {
+            payload["timestamp"] = Int((lastUpdateAt ?? Date()).timeIntervalSince1970)
+            payload["coords"] = [
+                "latitude": location.coordinate.latitude,
+                "longitude": location.coordinate.longitude,
+                "accuracy": location.horizontalAccuracy
+            ]
+        }
+
+        return payload
+    }
+
+    private func authorizationStatus() -> CLAuthorizationStatus {
+        if #available(iOS 14.0, *) {
+            return manager.authorizationStatus
+        }
+        return CLLocationManager.authorizationStatus()
+    }
+
+    private func authorizationLabel(_ status: CLAuthorizationStatus) -> String {
+        switch status {
+        case .authorizedAlways:
+            return "authorized_always"
+        case .authorizedWhenInUse:
+            return "authorized_when_in_use"
+        case .denied:
+            return "denied"
+        case .restricted:
+            return "restricted"
+        case .notDetermined:
+            return "not_determined"
+        @unknown default:
+            return "unknown"
+        }
+    }
+
+    private func presentAlert(_ message: String) {
+        guard alertMessage != message || !showAlert else {
+            return
+        }
+        alertMessage = message
+        showAlert = true
+    }
+
+    private func markUpdated() {
+        revision += 1
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = authorizationStatus()
+        switch status {
+        case .authorizedAlways, .authorizedWhenInUse:
+            requestLocationIfNeeded(force: true)
+        case .denied:
+            presentAlert("Location access is blocked. Enable location access in Settings to use Workday at Shop.")
+            markUpdated()
+        case .restricted:
+            presentAlert("Location access is restricted on this device. Workday at Shop is unavailable.")
+            markUpdated()
+        case .notDetermined:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else { return }
+        lastLocation = location
+        lastUpdateAt = Date()
+        markUpdated()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        let nsError = error as NSError
+        if nsError.domain == kCLErrorDomain && nsError.code == CLError.denied.rawValue {
+            presentAlert("Location access is blocked. Enable location access in Settings to use Workday at Shop.")
+        }
+        markUpdated()
+    }
+}
 
 @MainActor
 final class AppNavigationState: ObservableObject {
@@ -63,6 +208,7 @@ struct ContentView: View {
     @StateObject private var push = PushState.shared
     @StateObject private var roleState = RoleState.shared
     @StateObject private var appNavigation = AppNavigationState.shared
+    @StateObject private var locationState = LocationState.shared
 
     @State private var activatedTabs: Set<Tab> = [.left1]
 
@@ -139,6 +285,11 @@ struct ContentView: View {
         } message: {
             Text(lockAlertMessage)
         }
+        .alert("Location", isPresented: $locationState.showAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(locationState.alertMessage)
+        }
         .onAppear {
             activatedTabs.insert(selected)
             roleState.refresh()
@@ -191,6 +342,7 @@ struct ContentView: View {
             switch phase {
             case .active:
                 roleState.refresh()
+                locationState.requestLocationIfNeeded(force: false)
                 applyTabBarAppearance()
 
                 if hasCompletedFirstActivation {
@@ -330,7 +482,8 @@ struct ContentView: View {
             apnsToken: push.apnsToken,
             deviceId: push.deviceId,
             command: spec.command,
-            token: spec.token
+            token: spec.token,
+            locationRevision: locationState.revision
         )
     }
 
@@ -343,7 +496,8 @@ struct ContentView: View {
                 apnsToken: push.apnsToken,
                 deviceId: push.deviceId,
                 command: right2Command,
-                token: right2Token
+                token: right2Token,
+                locationRevision: locationState.revision
             )
         } else {
             Color.clear
@@ -868,6 +1022,7 @@ private struct LazyTabContainer: View {
     let deviceId: String
     let command: WebNavigationCommand?
     let token: UUID
+    let locationRevision: Int
 
     var body: some View {
         Group {
@@ -876,7 +1031,8 @@ private struct LazyTabContainer: View {
                     url: url,
                     apnsToken: apnsToken,
                     deviceId: deviceId,
-                    command: command
+                    command: command,
+                    locationRevision: locationRevision
                 )
                 .id(token)
             } else {

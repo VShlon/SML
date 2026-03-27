@@ -7,8 +7,8 @@
 //
 //  Назначение:
 //  - Общий More-экран для всех ролей.
-//  - Содержит Account, Notifications, Company, Social, Contact, Security.
-//  - Внутренние ссылки из More открываются в главном окне приложения.
+//  - Внутренние страницы открываются внутри More и не ломают tab-навигацию.
+//  - Внешние ссылки и системные действия открываются отдельно.
 //
 
 import SwiftUI
@@ -18,7 +18,8 @@ import LocalAuthentication
 struct SMLMoreRootView: View {
 
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var appNavigation = AppNavigationState.shared
+    @StateObject private var push = PushState.shared
+    @StateObject private var locationState = LocationState.shared
 
     private let linkAccount   = AppConfig.url("/account/")
     private let linkServices  = AppConfig.url("/services/")
@@ -35,7 +36,9 @@ struct SMLMoreRootView: View {
         NavigationStack {
             List {
                 Section {
-                    Button { openInMainWindow(linkAccount) } label: {
+                    NavigationLink {
+                        MoreInternalWebPageView(title: "Account", url: linkAccount)
+                    } label: {
                         row(system: "person", title: "Account")
                     }
 
@@ -47,15 +50,15 @@ struct SMLMoreRootView: View {
                 }
 
                 Section("COMPANY") {
-                    Button { openInMainWindow(linkServices) } label: { row(system: "leaf", title: "Services") }
-                    Button { openInMainWindow(linkProjects) } label: { row(system: "photo.on.rectangle", title: "Projects") }
-                    Button { openInMainWindow(linkMaterials) } label: { row(system: "cube.box", title: "Materials") }
-                    Button { openInMainWindow(linkCareers) } label: { row(system: "briefcase", title: "Careers") }
-                    Button { openInMainWindow(linkAbout) } label: { row(system: "info.circle", title: "About") }
-                    Button { openInMainWindow(linkFAQ) } label: { row(system: "questionmark.circle", title: "FAQ") }
-                    Button { openInMainWindow(linkContact) } label: { row(system: "envelope", title: "Contact") }
-                    Button { openInMainWindow(linkPrivacy) } label: { row(system: "hand.raised", title: "Privacy Policy") }
-                    Button { openInMainWindow(linkTerms) } label: { row(system: "doc.text", title: "Terms of Service") }
+                    NavigationLink { MoreInternalWebPageView(title: "Services", url: linkServices) } label: { row(system: "leaf", title: "Services") }
+                    NavigationLink { MoreInternalWebPageView(title: "Projects", url: linkProjects) } label: { row(system: "photo.on.rectangle", title: "Projects") }
+                    NavigationLink { MoreInternalWebPageView(title: "Materials", url: linkMaterials) } label: { row(system: "cube.box", title: "Materials") }
+                    NavigationLink { MoreInternalWebPageView(title: "Careers", url: linkCareers) } label: { row(system: "briefcase", title: "Careers") }
+                    NavigationLink { MoreInternalWebPageView(title: "About", url: linkAbout) } label: { row(system: "info.circle", title: "About") }
+                    NavigationLink { MoreInternalWebPageView(title: "FAQ", url: linkFAQ) } label: { row(system: "questionmark.circle", title: "FAQ") }
+                    NavigationLink { MoreInternalWebPageView(title: "Contact", url: linkContact) } label: { row(system: "envelope", title: "Contact") }
+                    NavigationLink { MoreInternalWebPageView(title: "Privacy Policy", url: linkPrivacy) } label: { row(system: "hand.raised", title: "Privacy Policy") }
+                    NavigationLink { MoreInternalWebPageView(title: "Terms of Service", url: linkTerms) } label: { row(system: "doc.text", title: "Terms of Service") }
                 }
 
                 Section("SOCIAL") {
@@ -138,11 +141,6 @@ struct SMLMoreRootView: View {
         .foregroundStyle(Color(uiColor: AppConfig.brandColor))
     }
 
-    private func openInMainWindow(_ url: URL) {
-        appNavigation.openInMainWindow(url, keepCurrentTab: false)
-        dismiss()
-    }
-
     private func openExternal(_ url: URL) {
         UIApplication.shared.open(url)
     }
@@ -150,6 +148,26 @@ struct SMLMoreRootView: View {
     private func callPhone() {
         guard let url = URL(string: "tel://\(AppConfig.phoneDigits)") else { return }
         UIApplication.shared.open(url)
+    }
+}
+
+private struct MoreInternalWebPageView: View {
+    let title: String
+    let url: URL
+
+    @StateObject private var push = PushState.shared
+    @StateObject private var locationState = LocationState.shared
+
+    var body: some View {
+        WebView(
+            url: url,
+            apnsToken: push.apnsToken,
+            deviceId: push.deviceId,
+            command: nil,
+            locationRevision: locationState.revision
+        )
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
