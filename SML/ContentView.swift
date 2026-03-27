@@ -63,6 +63,8 @@ struct ContentView: View {
     @StateObject private var roleState = RoleState.shared
     @StateObject private var appNavigation = AppNavigationState.shared
 
+    @State private var activatedTabs: Set<Tab> = [.left1]
+
     @State private var left1Token = UUID()
     @State private var left2Token = UUID()
     @State private var centerToken = UUID()
@@ -80,6 +82,7 @@ struct ContentView: View {
     @State private var isUnlockInProgress: Bool = false
     @State private var lockAlertMessage: String = ""
     @State private var showLockAlert: Bool = false
+    @State private var hasCompletedFirstActivation: Bool = false
 
     private let allowedHost = AppConfig.siteHost
     private let brand = AppConfig.brandColor
@@ -131,18 +134,16 @@ struct ContentView: View {
             Text(lockAlertMessage)
         }
         .onAppear {
+            activatedTabs.insert(selected)
             roleState.refresh()
             applyTabBarAppearance()
-
-            if biometricLockEnabled {
-                isAppLocked = true
-                requestBiometricUnlockIfNeeded()
-            }
+            isAppLocked = false
         }
         .onChange(of: roleState.mode) { _, _ in
             applyTabBarAppearance()
         }
         .onChange(of: selected) { _, newTab in
+            activatedTabs.insert(newTab)
 
             if newTab == .right2 {
                 showMoreSheet = true
@@ -178,8 +179,13 @@ struct ContentView: View {
                 roleState.refresh()
                 applyTabBarAppearance()
 
-                if biometricLockEnabled, isAppLocked {
-                    requestBiometricUnlockIfNeeded()
+                if hasCompletedFirstActivation {
+                    if biometricLockEnabled, isAppLocked {
+                        requestBiometricUnlockIfNeeded()
+                    }
+                } else {
+                    hasCompletedFirstActivation = true
+                    isAppLocked = false
                 }
 
                 if needsHomeRefreshAfterExternal {
@@ -191,7 +197,7 @@ struct ContentView: View {
                 }
 
             case .inactive, .background:
-                if biometricLockEnabled {
+                if biometricLockEnabled, hasCompletedFirstActivation {
                     isAppLocked = true
                     showMoreSheet = false
                 }
@@ -304,13 +310,14 @@ struct ContentView: View {
 
     @ViewBuilder
     private func tabBody(_ spec: TabSpec) -> some View {
-        WebView(
+        LazyTabContainer(
+            isActivated: activatedTabs.contains(spec.tab),
             url: URL(string: spec.url)!,
             apnsToken: push.apnsToken,
             deviceId: push.deviceId,
-            command: spec.command
+            command: spec.command,
+            token: spec.token
         )
-        .id(spec.token)
     }
 
     // MARK: - Tab labels
@@ -675,6 +682,43 @@ private struct TabBarReselectDetector: UIViewControllerRepresentable {
             case 2: return .center
             case 3: return .right1
             default: return .right2
+            }
+        }
+    }
+}
+
+
+private struct LazyTabContainer: View {
+    let isActivated: Bool
+    let url: URL
+    let apnsToken: String
+    let deviceId: String
+    let command: WebNavigationCommand?
+    let token: UUID
+
+    var body: some View {
+        Group {
+            if isActivated {
+                WebView(
+                    url: url,
+                    apnsToken: apnsToken,
+                    deviceId: deviceId,
+                    command: command
+                )
+                .id(token)
+            } else {
+                ZStack {
+                    Color(uiColor: .systemBackground)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 14) {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                        Text("Loading...")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
     }
