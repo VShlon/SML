@@ -574,11 +574,29 @@ struct ContentView: View {
             return
         }
 
-        right2URL = url
-        right2Command = nav
-        isRight2HostingPage = true
-        activatedTabs.insert(.right2)
-        selected = .right2
+        let fallbackTarget = lastNonMoreTab == .right2 ? .left1 : lastNonMoreTab
+        activatedTabs.insert(fallbackTarget)
+        isRight2HostingPage = false
+
+        if selected != fallbackTarget {
+            suppressReloadOnce = true
+            selected = fallbackTarget
+        }
+
+        lastNonMoreTab = fallbackTarget
+
+        switch fallbackTarget {
+        case .left1:
+            left1Command = nav
+        case .left2:
+            left2Command = nav
+        case .center:
+            centerCommand = nav
+        case .right1:
+            right1Command = nav
+        case .right2:
+            break
+        }
     }
 
     private func routeToURL(_ url: URL, commandId: UUID, mode: RoleState.Mode) {

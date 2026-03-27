@@ -42,8 +42,7 @@ struct SMLMoreRootView: View {
                     NavigationLink {
                         NotificationsView()
                     } label: {
-                        row(system: "bell", title: "Notifications")
-                            .foregroundStyle(Color(uiColor: AppConfig.brandColor))
+                        row(system: "bell", title: "Notifications", color: Color(uiColor: AppConfig.brandColor))
                     }
                 }
 
@@ -111,14 +110,14 @@ struct SMLMoreRootView: View {
         .tint(Color(uiColor: AppConfig.brandColor))
     }
 
-    private func row(system: String, title: String) -> some View {
+    private func row(system: String, title: String, color: Color = Color(uiColor: AppConfig.brandColor)) -> some View {
         HStack(spacing: 12) {
             Image(systemName: system)
                 .frame(width: 22)
             Text(title)
             Spacer()
         }
-        .foregroundStyle(Color(uiColor: AppConfig.brandColor))
+        .foregroundStyle(color)
     }
 
     private func rowCustomIcon(assetName: String, fallbackSystem: String, title: String) -> some View {
