@@ -148,8 +148,12 @@ struct ContentView: View {
         .onChange(of: roleState.mode) { _, _ in
             applyTabBarAppearance()
         }
-        .onChange(of: selected) { _, newTab in
+        .onChange(of: selected) { oldTab, newTab in
             activatedTabs.insert(newTab)
+
+            if oldTab == .right2, newTab != .right2, isRight2HostingPage {
+                resetRight2ToRoot()
+            }
 
             if newTab == .right2 {
                 if isRight2HostingPage {
@@ -552,50 +556,14 @@ struct ContentView: View {
 
         let nav = WebNavigationCommand(id: commandId, url: url)
 
-        if let target = explicitTabTarget(for: url.path.lowercased(), mode: mode) {
+        activatedTabs.insert(.right2)
+        isRight2HostingPage = true
+        right2URL = url
+        right2Command = nav
+
+        if selected != .right2 {
             suppressReloadOnce = true
-            activatedTabs.insert(target)
-            selected = target
-            lastNonMoreTab = target
-            isRight2HostingPage = false
-
-            switch target {
-            case .left1:
-                left1Command = nav
-            case .left2:
-                left2Command = nav
-            case .center:
-                centerCommand = nav
-            case .right1:
-                right1Command = nav
-            case .right2:
-                break
-            }
-            return
-        }
-
-        let fallbackTarget = lastNonMoreTab == .right2 ? .left1 : lastNonMoreTab
-        activatedTabs.insert(fallbackTarget)
-        isRight2HostingPage = false
-
-        if selected != fallbackTarget {
-            suppressReloadOnce = true
-            selected = fallbackTarget
-        }
-
-        lastNonMoreTab = fallbackTarget
-
-        switch fallbackTarget {
-        case .left1:
-            left1Command = nav
-        case .left2:
-            left2Command = nav
-        case .center:
-            centerCommand = nav
-        case .right1:
-            right1Command = nav
-        case .right2:
-            break
+            selected = .right2
         }
     }
 

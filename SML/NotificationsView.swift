@@ -33,6 +33,7 @@ struct NotificationsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Push Notifications")
                             .font(.headline)
+                            .foregroundStyle(brandColor)
                         Text(permissionStatus)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -94,14 +95,10 @@ struct NotificationsView: View {
     }
 
     private func statusColor() -> Color {
-        switch permissionStatus {
-        case "Enabled", "Provisional":
-            return brandColor
-        case "Disabled":
+        if permissionStatus == "Disabled" {
             return .red
-        default:
-            return .secondary
         }
+        return brandColor
     }
 
     private func requestNotifications() async {
