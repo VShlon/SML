@@ -17,6 +17,7 @@
 import SwiftUI
 import WebKit
 import UIKit
+import Security
 
 struct WebNavigationCommand: Equatable {
     let id: UUID
@@ -522,6 +523,10 @@ extension WebView {
             let device = did.isEmpty ? "ios-device" : did
             let biometricEnabled = currentBiometricEnabled
             let hasBiometricLogin = currentHasBiometricLogin
+            let bundleId = Bundle.main.bundleIdentifier ?? ""
+            let appVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
+            let buildNumber = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? ""
+            let pushEnvironment = currentPushEnvironment()
 
             let page = webView.url?.absoluteString ?? ""
 
@@ -535,11 +540,15 @@ extension WebView {
 
             let tokenJS = jsString(token)
             let deviceJS = jsString(device)
+            let bundleIdJS = jsString(bundleId)
+            let appVersionJS = jsString(appVersion)
+            let buildNumberJS = jsString(buildNumber)
+            let pushEnvironmentJS = jsString(pushEnvironment)
             let biometricEnabledJS = biometricEnabled ? "true" : "false"
             let hasBiometricLoginJS = hasBiometricLogin ? "true" : "false"
 
             let css = """
-            input, textarea, [contenteditable=\"true\"] { caret-color: #438239 !important; }
+            input, textarea, [contenteditable="true"] { caret-color: #438239 !important; }
             """
             let cssJS = jsString(css)
 
@@ -548,6 +557,10 @@ extension WebView {
               window.SML_APP = window.SML_APP || {};
               window.SML_APP.apnsToken = \(tokenJS);
               window.SML_APP.deviceId = \(deviceJS);
+              window.SML_APP.bundleId = \(bundleIdJS);
+              window.SML_APP.appVersion = \(appVersionJS);
+              window.SML_APP.buildNumber = \(buildNumberJS);
+              window.SML_APP.pushEnvironment = \(pushEnvironmentJS);
               window.SML_APP.isApp = true;
               window.SML_APP.platform = "ios";
               window.SML_APP.biometricEnabled = \(biometricEnabledJS);
@@ -570,7 +583,11 @@ extension WebView {
                   detail: {
                     platform: "ios",
                     biometricEnabled: window.SML_APP.biometricEnabled,
-                    hasBiometricLogin: window.SML_APP.hasBiometricLogin
+                    hasBiometricLogin: window.SML_APP.hasBiometricLogin,
+                    bundleId: window.SML_APP.bundleId,
+                    appVersion: window.SML_APP.appVersion,
+                    buildNumber: window.SML_APP.buildNumber,
+                    pushEnvironment: window.SML_APP.pushEnvironment
                   }
                 }));
               } catch (e) {}
@@ -582,7 +599,11 @@ extension WebView {
                       detail: {
                         platform: "ios",
                         biometricEnabled: window.SML_APP.biometricEnabled,
-                        hasBiometricLogin: window.SML_APP.hasBiometricLogin
+                        hasBiometricLogin: window.SML_APP.hasBiometricLogin,
+                        bundleId: window.SML_APP.bundleId,
+                        appVersion: window.SML_APP.appVersion,
+                        buildNumber: window.SML_APP.buildNumber,
+                        pushEnvironment: window.SML_APP.pushEnvironment
                       }
                     }));
                   } catch (e2) {}
@@ -591,6 +612,10 @@ extension WebView {
 
               window.SML_PUSH_TOKEN = \(tokenJS);
               window.SML_PUSH_DEVICE_ID = \(deviceJS);
+              window.SML_PUSH_BUNDLE_ID = \(bundleIdJS);
+              window.SML_PUSH_APP_VERSION = \(appVersionJS);
+              window.SML_PUSH_BUILD_NUMBER = \(buildNumberJS);
+              window.SML_PUSH_ENVIRONMENT = \(pushEnvironmentJS);
 
               try {
                 if (!document.getElementById('sml-ios-style')) {
@@ -652,6 +677,20 @@ extension WebView {
             """
 
             webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+
+        private func currentPushEnvironment() -> String {
+#if targetEnvironment(simulator)
+            return "sandbox"
+#else
+            guard let task = SecTaskCreateFromSelf(nil) else {
+                return "sandbox"
+            }
+
+            let value = SecTaskCopyValueForEntitlement(task, "aps-environment" as CFString, nil)
+            let raw = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+            return raw == "production" ? "production" : "sandbox"
+#endif
         }
 
         private func injectBiometricUIIfNeeded(webView: WKWebView) {
