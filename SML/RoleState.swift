@@ -1,15 +1,15 @@
 //
 //  RoleState.swift
-//  sml
+//  SMC
 //
-//  Version: 1.0.0
+//  Version: 1.0.1
 //  Author: Nuvren.com
 //
 //  Назначение:
-//  - Хранит текущую роль пользователя для app-меню.
-//  - Обновляет роль через bridge из WebView и через network-refresh.
-//  - Устойчиво парсит разные форматы ответа.
-//  - Сохраняет последнюю валидную роль, чтобы меню не сбрасывалось из-за временной ошибки.
+//  - Источник правды для режима меню (guest/client/worker/accountant/admin)
+//  - Основной способ: роль приходит из WebView через bridge (JS fetch + credentials)
+//  - Fallback: URLSession whoami
+//  - Защита: авторизованный пользователь не должен падать в guest от временного сбоя whoami
 //
 
 import Foundation
@@ -24,19 +24,19 @@ final class RoleState: ObservableObject {
         case client
         case worker
         case accountant
-        case administrator
-        case manager
-        case owner
+        case admin
     }
 
-    @Published private(set) var mode: Mode
-    @Published private(set) var wpRole: String
-    @Published private(set) var lastError: String?
+    @Published private(set) var mode: Mode = .guest
+    @Published private(set) var wpRole: String = "guest"
+    @Published private(set) var lastError: String? = nil
 
-    private let whoamiURL = AppConfig.whoamiURL
-    private let storedRoleKey = "sml_last_role"
+    private let whoamiURL = URL(string: "https://stmaryslandscaping.ca/wp-json/sml/v1/whoami")!
 
-    private var isLoading = false
+    private let storedModeKey = "sml.role.mode"
+    private let storedRoleKey = "sml.role.wpRole"
+
+    private var isLoading: Bool = false
     private var lastRefreshAt: TimeInterval = 0
     private let minRefreshInterval: TimeInterval = 0.6
 
@@ -51,46 +51,24 @@ final class RoleState: ObservableObject {
     }()
 
     private init() {
-        let stored = UserDefaults.standard.string(forKey: storedRoleKey) ?? "guest"
-        let normalized = Self.normalizeRoleString(stored) ?? "guest"
-
-        self.mode = Self.mode(for: normalized) ?? .guest
-        self.wpRole = normalized
-        self.lastError = nil
+        restorePersistedAuthorizedRoleIfNeeded()
     }
+
+    // MARK: - Preferred: set role from WebView bridge
 
     func setRoleFromBridge(role raw: String?) {
         lastError = nil
-
-        guard let normalized = Self.normalizeRoleString(raw) else {
-            return
-        }
-
-        if normalized == "guest", mode != .guest {
-            return
-        }
-
-        applyResolvedRole(normalized)
+        resolveAndApply(from: [
+            "role": raw ?? ""
+        ])
     }
 
-    func setRoleFromBridge(payload: Any?) {
+    func setRoleFromBridge(payload: [String: Any]) {
         lastError = nil
-
-        let source = Self.extractBridgeSource(from: payload)
-
-        if let resolved = Self.extractRole(from: payload) {
-            if resolved == "guest", !shouldAcceptGuestTransition(from: source, payload: payload) {
-                return
-            }
-
-            applyResolvedRole(resolved)
-            return
-        }
-
-        if Self.payloadExplicitlyRepresentsGuest(payload), shouldAcceptGuestTransition(from: source, payload: payload) {
-            applyResolvedRole("guest")
-        }
+        resolveAndApply(from: payload)
     }
+
+    // MARK: - Fallback: URLSession whoami
 
     func refresh() {
         let now = Date().timeIntervalSince1970
@@ -114,323 +92,299 @@ final class RoleState: ObservableObject {
 
                 if let http = resp as? HTTPURLResponse {
                     if http.statusCode == 401 || http.statusCode == 403 {
-                        self.lastError = "whoami HTTP \(http.statusCode)"
+                        self.applyGuest(clearPersisted: true)
                         return
                     }
-
-                    if !(200...299).contains(http.statusCode) {
+                    if http.statusCode < 200 || http.statusCode >= 300 {
                         self.lastError = "whoami HTTP \(http.statusCode)"
+                        self.keepAuthorizedRoleIfPossible()
                         return
                     }
                 }
 
                 let obj = try JSONSerialization.jsonObject(with: data, options: [])
-
-                if let resolved = Self.extractRole(from: obj) {
-                    self.applyResolvedRole(resolved)
+                guard let dict = obj as? [String: Any] else {
+                    self.lastError = "whoami invalid JSON"
+                    self.keepAuthorizedRoleIfPossible()
                     return
                 }
 
-                if Self.payloadExplicitlyRepresentsGuest(obj) {
-                    self.applyResolvedRole("guest")
-                    return
-                }
-
-                self.lastError = "whoami role not found"
+                self.resolveAndApply(from: dict)
 
             } catch {
                 self.lastError = error.localizedDescription
+                self.keepAuthorizedRoleIfPossible()
             }
         }
     }
 
-    private func applyResolvedRole(_ raw: String) {
-        let normalized = Self.normalizeRoleString(raw) ?? "guest"
-        wpRole = normalized
-        mode = Self.mode(for: normalized) ?? .guest
-        UserDefaults.standard.set(normalized, forKey: storedRoleKey)
+    // MARK: - Resolve role
+
+    private func resolveAndApply(from payload: [String: Any]) {
+        if isExplicitUnauthorized(payload) {
+            applyGuest(clearPersisted: true)
+            return
+        }
+
+        let authenticated = isAuthenticated(payload)
+        let candidates = collectCandidates(from: payload)
+
+        if let resolved = firstResolvedRole(from: candidates) {
+            applyAuthorized(mode: resolved.mode, wpRole: resolved.rawRole)
+            return
+        }
+
+        if authenticated {
+            if let currentAuthorized = currentAuthorizedMode() {
+                applyAuthorized(mode: currentAuthorized, wpRole: wpRoleForMode(currentAuthorized))
+                return
+            }
+
+            if let persisted = persistedAuthorizedMode() {
+                applyAuthorized(mode: persisted, wpRole: wpRoleForMode(persisted))
+                return
+            }
+
+            if let inferred = inferRoleFromHints(payload: payload) {
+                applyAuthorized(mode: inferred, wpRole: wpRoleForMode(inferred))
+                return
+            }
+
+            applyAuthorized(mode: .client, wpRole: wpRoleForMode(.client))
+            return
+        }
+
+        if hasAnyAuthHint(payload) {
+            keepAuthorizedRoleIfPossible()
+            return
+        }
+
+        keepAuthorizedRoleIfPossible()
     }
 
-    private static func mode(for raw: String) -> Mode? {
-        switch raw {
-        case "administrator", "admin":
-            return .administrator
-        case "owner", "boss":
-            return .owner
-        case "manager":
-            return .manager
-        case "accountant", "bookkeeper", "accounting":
-            return .accountant
-        case "worker", "employee", "staff":
-            return .worker
-        case "commercial", "residential", "client", "customer":
-            return .client
-        case "guest", "anonymous":
-            return .guest
-        default:
+    private func collectCandidates(from payload: [String: Any]) -> [String] {
+        var out: [String] = []
+
+        func append(_ value: Any?) {
+            if let s = value as? String, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                out.append(s)
+            }
+            if let arr = value as? [String] {
+                out.append(contentsOf: arr)
+            }
+            if let arr = value as? [Any] {
+                for item in arr {
+                    if let s = item as? String, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        out.append(s)
+                    }
+                }
+            }
+        }
+
+        append(payload["role"])
+        append(payload["wp_role"])
+        append(payload["role_label"])
+        append(payload["roles"])
+        append(payload["role_candidates"])
+        append(payload["current_path"])
+        append(payload["href"])
+        append(payload["body_class"])
+
+        return out
+    }
+
+    private func firstResolvedRole(from candidates: [String]) -> (mode: Mode, rawRole: String)? {
+        for candidate in candidates {
+            if let resolved = resolveRole(candidate) {
+                return resolved
+            }
+        }
+        return nil
+    }
+
+    private func resolveRole(_ raw: String) -> (mode: Mode, rawRole: String)? {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if value.isEmpty { return nil }
+
+        if containsAny(value, ["administrator", "admin", "owner", "manager", "workspace", "all-tasks", "create-task", "wp-admin"]) {
+            return (.admin, "admin")
+        }
+
+        if containsAny(value, ["accountant", "bookkeeper", "finance", "billing", "payroll", "monthly-billing", "payroll-review"]) {
+            return (.accountant, "accountant")
+        }
+
+        if containsAny(value, ["worker", "employee", "crew", "technician", "workday", "tasks-today", "report"]) {
+            return (.worker, "worker")
+        }
+
+        if containsAny(value, ["client", "customer", "customers", "commercial", "residential", "member", "subscriber", "invoices", "my-requests", "order-history", "/account", "/orders"] ) {
+            return (.client, "client")
+        }
+
+        if containsAny(value, ["guest", "anonymous"]) {
             return nil
-        }
-    }
-
-    private static func normalizeRoleString(_ raw: String?) -> String? {
-        guard let raw else { return nil }
-
-        let cleaned = raw
-            .lowercased()
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
-            .replacingOccurrences(of: "[", with: " ")
-            .replacingOccurrences(of: "]", with: " ")
-            .replacingOccurrences(of: "{", with: " ")
-            .replacingOccurrences(of: "}", with: " ")
-            .replacingOccurrences(of: "\"", with: " ")
-            .replacingOccurrences(of: "'", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if cleaned.isEmpty { return nil }
-
-        let separators = CharacterSet(charactersIn: ",|/;: ()-_")
-        let candidates = cleaned
-            .components(separatedBy: separators)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        let priority = [
-            "administrator", "admin",
-            "owner", "boss",
-            "manager",
-            "accountant", "bookkeeper", "accounting",
-            "worker", "employee", "staff",
-            "commercial", "residential", "client", "customer",
-            "guest", "anonymous"
-        ]
-
-        for item in priority where candidates.contains(item) {
-            return item
-        }
-
-        if let direct = mode(for: cleaned) {
-            return direct.rawValue
         }
 
         return nil
     }
 
-    private enum BridgeSource {
-        case unknown
-        case dom
-        case whoami
+    private func inferRoleFromHints(payload: [String: Any]) -> Mode? {
+        let path = extractString(payload["current_path"]).lowercased()
+        let href = extractString(payload["href"]).lowercased()
+        let bodyClass = extractString(payload["body_class"]).lowercased()
+        let joined = [path, href, bodyClass].joined(separator: " ")
+
+        if let resolved = resolveRole(joined) {
+            return resolved.mode
+        }
+        return nil
     }
 
-    private func shouldAcceptGuestTransition(from source: BridgeSource, payload: Any? = nil) -> Bool {
-        if mode == .guest {
+    // MARK: - Auth hints
+
+    private func isExplicitUnauthorized(_ payload: [String: Any]) -> Bool {
+        if let status = extractInt(payload["status"]), status == 401 || status == 403 { return true }
+        if let status = extractInt(payload["http_status"]), status == 401 || status == 403 { return true }
+
+        let role = extractString(payload["role"]).lowercased()
+        let authenticated = isAuthenticated(payload)
+
+        if role == "guest" && payload.keys.contains("role") && authenticated == false {
             return true
-        }
-
-        switch source {
-        case .whoami:
-            return false
-        case .dom, .unknown:
-            return Self.payloadClearlyRepresentsLoggedOutScreen(payload)
-        }
-    }
-
-    private static func extractBridgeSource(from payload: Any?) -> BridgeSource {
-        if let dict = payload as? [String: Any] {
-            if let raw = dict["role_source"] as? String {
-                return parseBridgeSource(raw)
-            }
-
-            if let raw = dict["source"] as? String {
-                return parseBridgeSource(raw)
-            }
-
-            return .unknown
-        }
-
-        if let dict = payload as? NSDictionary {
-            if let raw = dict["role_source"] as? String {
-                return parseBridgeSource(raw)
-            }
-
-            if let raw = dict["source"] as? String {
-                return parseBridgeSource(raw)
-            }
-        }
-
-        return .unknown
-    }
-
-    private static func parseBridgeSource(_ raw: String) -> BridgeSource {
-        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "dom":
-            return .dom
-        case "whoami":
-            return .whoami
-        default:
-            return .unknown
-        }
-    }
-
-    private static func extractRole(from payload: Any?) -> String? {
-        switch payload {
-        case let string as String:
-            return normalizeRoleString(string)
-
-        case let array as [Any]:
-            for item in array {
-                if let resolved = extractRole(from: item) {
-                    return resolved
-                }
-            }
-            return nil
-
-        case let dict as [String: Any]:
-            let directKeys = [
-                "role", "primary_role", "wp_role", "user_role", "current_role", "slug",
-                "role_label", "role_text", "roleLabel", "roleText", "userRole", "primaryRole",
-                "body_class", "bodyClass", "className"
-            ]
-
-            for key in directKeys {
-                if let resolved = extractRole(from: dict[key]) {
-                    return resolved
-                }
-            }
-
-            if let resolved = extractRole(from: dict["roles"]) {
-                return resolved
-            }
-
-            if let resolved = extractRole(from: dict["role_candidates"]) {
-                return resolved
-            }
-
-            let nestedKeys = ["user", "data", "result", "whoami", "account", "meta"]
-            for key in nestedKeys {
-                if let resolved = extractRole(from: dict[key]) {
-                    return resolved
-                }
-            }
-
-            return nil
-
-        case let nsDict as NSDictionary:
-            var swiftDict: [String: Any] = [:]
-            nsDict.forEach { key, value in
-                if let stringKey = key as? String {
-                    swiftDict[stringKey] = value
-                }
-            }
-            return extractRole(from: swiftDict)
-
-        default:
-            return nil
-        }
-    }
-
-
-    private static func payloadClearlyRepresentsLoggedOutScreen(_ payload: Any?) -> Bool {
-        let dict: [String: Any]
-        if let payload = payload as? [String: Any] {
-            dict = payload
-        } else if let payload = payload as? NSDictionary {
-            var mapped: [String: Any] = [:]
-            payload.forEach { key, value in
-                if let key = key as? String {
-                    mapped[key] = value
-                }
-            }
-            dict = mapped
-        } else {
-            return false
-        }
-
-        let path = (dict["path"] as? String ?? dict["href"] as? String ?? "").lowercased()
-        if path.contains("/login") || path.contains("/register") || path.contains("/forgot-password") || path.contains("/reset-password") {
-            return true
-        }
-
-        let bodyClass = (dict["body_class"] as? String ?? dict["bodyClass"] as? String ?? "").lowercased()
-        if bodyClass.contains("page-template-page-login")
-            || bodyClass.contains("page-template-page-register")
-            || bodyClass.contains("page-template-page-forgot-password")
-            || bodyClass.contains("page-template-page-reset-password") {
-            return true
-        }
-
-        if let loggedIn = dict["loggedIn"] as? Bool, loggedIn == false {
-            if path.contains("/account") || path.contains("/login") || path.contains("/register") || path.contains("/forgot-password") || path.contains("/reset-password") {
-                return true
-            }
-            if bodyClass.contains("logged-in") {
-                return false
-            }
         }
 
         return false
     }
 
-    private static func payloadExplicitlyRepresentsGuest(_ payload: Any?) -> Bool {
-        if let dict = payload as? [String: Any] {
-            let boolKeys = [
-                "logged_in", "is_logged_in", "authenticated", "is_authenticated",
-                "loggedIn", "isLoggedIn", "authenticatedUser"
-            ]
+    private func isAuthenticated(_ payload: [String: Any]) -> Bool {
+        if let b = extractBool(payload["authenticated"]) { return b }
+        if let b = extractBool(payload["logged_in"]) { return b }
+        if let b = extractBool(payload["is_logged_in"]) { return b }
+        if let b = extractBool(payload["isAuthenticated"]) { return b }
 
-            for key in boolKeys {
-                if let flag = dict[key] as? Bool, flag == false {
-                    return true
-                }
-            }
+        let bodyClass = extractString(payload["body_class"]).lowercased()
+        if bodyClass.contains("logged-in") { return true }
 
-            if let role = dict["role"] as? String, role.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                if let loggedIn = dict["loggedIn"] as? Bool, loggedIn {
-                    return false
-                }
-                return true
-            }
-
-            let nestedKeys = ["user", "data", "result", "whoami", "account", "meta"]
-            for key in nestedKeys where payloadExplicitlyRepresentsGuest(dict[key]) {
-                return true
-            }
-        }
-
-        if let dict = payload as? NSDictionary {
-            let boolKeys = [
-                "logged_in", "is_logged_in", "authenticated", "is_authenticated",
-                "loggedIn", "isLoggedIn", "authenticatedUser"
-            ]
-
-            for key in boolKeys {
-                if let flag = dict[key] as? Bool, flag == false {
-                    return true
-                }
-            }
-
-            if let role = dict["role"] as? String, role.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                if let loggedIn = dict["loggedIn"] as? Bool, loggedIn {
-                    return false
-                }
-                return true
-            }
-
-            let nestedKeys = ["user", "data", "result", "whoami", "account", "meta"]
-            for key in nestedKeys where payloadExplicitlyRepresentsGuest(dict[key]) {
-                return true
-            }
-        }
-
-        if let string = payload as? String {
-            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return trimmed.isEmpty || trimmed == "guest" || trimmed == "anonymous"
-        }
-
-        if let number = payload as? NSNumber {
-            return number.boolValue == false
+        let href = extractString(payload["href"]).lowercased()
+        let path = extractString(payload["current_path"]).lowercased()
+        if href.contains("/my-account") || href.contains("/account/") || path.contains("/my-account") || path.contains("/account/") {
+            return true
         }
 
         return false
+    }
+
+    private func hasAnyAuthHint(_ payload: [String: Any]) -> Bool {
+        if payload.keys.contains("authenticated") || payload.keys.contains("logged_in") || payload.keys.contains("is_logged_in") || payload.keys.contains("isAuthenticated") {
+            return true
+        }
+        let bodyClass = extractString(payload["body_class"]).lowercased()
+        return bodyClass.contains("logged-in")
+    }
+
+    // MARK: - Apply state
+
+    private func applyAuthorized(mode newMode: Mode, wpRole newRole: String) {
+        mode = newMode
+        wpRole = newRole
+        persistAuthorized(mode: newMode, wpRole: newRole)
+    }
+
+    private func applyGuest(clearPersisted: Bool) {
+        mode = .guest
+        wpRole = "guest"
+        if clearPersisted {
+            clearPersistedAuthorizedRole()
+        }
+    }
+
+    private func keepAuthorizedRoleIfPossible() {
+        if let currentAuthorized = currentAuthorizedMode() {
+            mode = currentAuthorized
+            wpRole = wpRoleForMode(currentAuthorized)
+            return
+        }
+
+        if let persisted = persistedAuthorizedMode() {
+            applyAuthorized(mode: persisted, wpRole: wpRoleForMode(persisted))
+            return
+        }
+
+        applyGuest(clearPersisted: false)
+    }
+
+    private func currentAuthorizedMode() -> Mode? {
+        mode == .guest ? nil : mode
+    }
+
+    private func wpRoleForMode(_ mode: Mode) -> String {
+        switch mode {
+        case .guest: return "guest"
+        case .client: return "client"
+        case .worker: return "worker"
+        case .accountant: return "accountant"
+        case .admin: return "admin"
+        }
+    }
+
+    // MARK: - Persistence
+
+    private func persistAuthorized(mode: Mode, wpRole: String) {
+        guard mode != .guest else { return }
+        UserDefaults.standard.set(mode.rawValue, forKey: storedModeKey)
+        UserDefaults.standard.set(wpRole, forKey: storedRoleKey)
+    }
+
+    private func clearPersistedAuthorizedRole() {
+        UserDefaults.standard.removeObject(forKey: storedModeKey)
+        UserDefaults.standard.removeObject(forKey: storedRoleKey)
+    }
+
+    private func restorePersistedAuthorizedRoleIfNeeded() {
+        guard mode == .guest else { return }
+        guard let persisted = persistedAuthorizedMode() else { return }
+        mode = persisted
+        wpRole = UserDefaults.standard.string(forKey: storedRoleKey) ?? wpRoleForMode(persisted)
+    }
+
+    private func persistedAuthorizedMode() -> Mode? {
+        guard let raw = UserDefaults.standard.string(forKey: storedModeKey), let stored = Mode(rawValue: raw), stored != .guest else {
+            return nil
+        }
+        return stored
+    }
+
+    // MARK: - Helpers
+
+    private func containsAny(_ text: String, _ needles: [String]) -> Bool {
+        for needle in needles where text.contains(needle) {
+            return true
+        }
+        return false
+    }
+
+    private func extractString(_ value: Any?) -> String {
+        if let s = value as? String { return s }
+        if let n = value as? NSNumber { return n.stringValue }
+        return ""
+    }
+
+    private func extractInt(_ value: Any?) -> Int? {
+        if let i = value as? Int { return i }
+        if let n = value as? NSNumber { return n.intValue }
+        if let s = value as? String { return Int(s) }
+        return nil
+    }
+
+    private func extractBool(_ value: Any?) -> Bool? {
+        if let b = value as? Bool { return b }
+        if let n = value as? NSNumber { return n.boolValue }
+        if let s = value as? String {
+            let v = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if v == "true" || v == "1" || v == "yes" { return true }
+            if v == "false" || v == "0" || v == "no" { return false }
+        }
+        return nil
     }
 }

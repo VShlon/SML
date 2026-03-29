@@ -1,5 +1,0 @@
-SML iOS PUSH NOTES
-
-- The app now requests permission, refreshes APNs registration on app active, persists the last APNs token, and injects token/device/app metadata into the website.
-- The website auto-registers the device through /wp-json/sml/v1/push/register.
-- For App Store delivery you still must sign the app with Push Notifications enabled for the final bundle id.

@@ -1,17 +1,17 @@
 //
 //  WebView.swift
-//  sml
+//  SMC
 //
-//  Version: 1.0.0
+//  Version: 1.0.2
 //  Author: Nuvren.com
 //
 //  Назначение:
-//  - WKWebView внутри SwiftUI.
-//  - Общие cookies и сессия.
-//  - Role bridge через whoami.
-//  - Корректная обработка внутренних, внешних и системных ссылок.
-//  - iPad показывает мобильную версию сайта.
-//  - Есть нативный loading / timeout / retry, чтобы app не выглядел зависшим.
+//  - WKWebView внутри SwiftUI
+//  - Общие cookies/сессия (.default)
+//  - ROLE BRIDGE: whoami -> RoleState
+//  - Cookie sync fallback -> RoleState.refresh()
+//  - Inject apnsToken + deviceId
+//  - External links blocked (кроме нужных для reCAPTCHA)
 //
 
 import SwiftUI
@@ -28,17 +28,23 @@ struct WebView: UIViewControllerRepresentable {
     let url: URL
     let apnsToken: String
     let deviceId: String
+    let biometricEnabled: Bool
+    let hasBiometricLogin: Bool
     let command: WebNavigationCommand?
-    let locationRevision: Int
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIViewController(context: Context) -> WebViewController {
         let vc = WebViewController()
         vc.coordinator = context.coordinator
-        context.coordinator.hostController = vc
+        context.coordinator.hostViewController = vc
 
-        context.coordinator.setCurrent(apnsToken: apnsToken, deviceId: deviceId, locationRevision: locationRevision)
+        context.coordinator.setCurrent(
+            apnsToken: apnsToken,
+            deviceId: deviceId,
+            biometricEnabled: biometricEnabled,
+            hasBiometricLogin: hasBiometricLogin
+        )
         context.coordinator.setCommand(command)
 
         vc.initialURL = url
@@ -48,9 +54,12 @@ struct WebView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ vc: WebViewController, context: Context) {
-        vc.coordinator = context.coordinator
-        context.coordinator.hostController = vc
-        context.coordinator.setCurrent(apnsToken: apnsToken, deviceId: deviceId, locationRevision: locationRevision)
+        context.coordinator.setCurrent(
+            apnsToken: apnsToken,
+            deviceId: deviceId,
+            biometricEnabled: biometricEnabled,
+            hasBiometricLogin: hasBiometricLogin
+        )
         context.coordinator.setCommand(command)
 
         if let wv = vc.webView {
@@ -71,28 +80,24 @@ final class WebViewController: UIViewController {
     fileprivate var initialCommand: WebNavigationCommand?
 
     private var didLoadInitial = false
-    private var currentRequestURL: URL?
 
+    fileprivate func setFaceIDButtonVisible(_ visible: Bool, enabled: Bool) { }
+    fileprivate func positionFaceIDButton(x: CGFloat, y: CGFloat) { }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
 
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
 
-        if #available(iOS 14.0, *) {
-            let prefs = WKWebpagePreferences()
-            prefs.preferredContentMode = .mobile
-            config.defaultWebpagePreferences = prefs
-        }
-
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.translatesAutoresizingMaskIntoConstraints = false
 
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        if #available(iOS 13.0, *) {
+            wv.configuration.defaultWebpagePreferences.preferredContentMode = .mobile
         }
+
+        wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1 SMLApp-iOS/1.0"
 
         view.addSubview(wv)
 
@@ -101,20 +106,22 @@ final class WebViewController: UIViewController {
             wv.leadingAnchor.constraint(equalTo: g.leadingAnchor),
             wv.trailingAnchor.constraint(equalTo: g.trailingAnchor),
             wv.topAnchor.constraint(equalTo: g.topAnchor),
-            wv.bottomAnchor.constraint(equalTo: g.bottomAnchor)
+            wv.bottomAnchor.constraint(equalTo: g.bottomAnchor),
         ])
 
         if let coordinator {
+            coordinator.hostViewController = self
+            coordinator.attachedWebView = wv
             wv.navigationDelegate = coordinator
             wv.uiDelegate = coordinator
-            wv.configuration.userContentController.add(coordinator, name: "SMLWhoami")
+            wv.configuration.userContentController.add(coordinator, name: "smlWhoami")
+            wv.configuration.userContentController.add(coordinator, name: "smlBiometric")
         }
 
         wv.allowsBackForwardNavigationGestures = true
         wv.scrollView.contentInsetAdjustmentBehavior = .never
         wv.scrollView.contentInset = .zero
         wv.scrollView.scrollIndicatorInsets = .zero
-
         if #available(iOS 15.0, *) {
             wv.scrollView.automaticallyAdjustsScrollIndicatorInsets = false
         }
@@ -124,6 +131,7 @@ final class WebViewController: UIViewController {
         wv.scrollView.backgroundColor = .systemBackground
 
         self.webView = wv
+
         loadInitialIfNeeded()
     }
 
@@ -137,59 +145,18 @@ final class WebViewController: UIViewController {
         guard !didLoadInitial else { return }
         didLoadInitial = true
 
-        let base = initialURL ?? AppConfig.siteURL
+        let base = initialURL ?? URL(string: "https://stmaryslandscaping.ca/")!
 
         if let cmd = initialCommand {
             coordinator.markCommandHandled(cmd.id)
-            if coordinator.shouldOpenExternally(cmd.url) {
-                load(url: base, in: wv)
+            if coordinator.isExternalURL(cmd.url) {
+                wv.load(URLRequest(url: base))
             } else {
-                load(url: cmd.url, in: wv)
+                wv.load(URLRequest(url: cmd.url))
             }
         } else {
-            load(url: base, in: wv)
+            wv.load(URLRequest(url: base))
         }
-    }
-
-    fileprivate func load(url: URL, in webView: WKWebView? = nil) {
-        guard let wv = webView ?? self.webView else { return }
-        currentRequestURL = url
-        wv.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20))
-    }
-
-    fileprivate func handleNavigationStart() {
-    }
-
-    fileprivate func handleNavigationCommitted() {
-    }
-
-    fileprivate func handleNavigationFinished() {
-    }
-
-    fileprivate func handleNavigationFailure(message: String) {
-        presentLoadError(message: message)
-    }
-
-    private func presentLoadError(message: String) {
-        if presentedViewController != nil { return }
-
-        let alert = UIAlertController(
-            title: "Could not open page",
-            message: message,
-            preferredStyle: .alert
-        )
-
-        alert.addAction(UIAlertAction(title: "Close", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Retry", style: .default) { [weak self] _ in
-            self?.retryTapped()
-        })
-
-        present(alert, animated: true)
-    }
-
-    @objc private func retryTapped() {
-        guard let target = currentRequestURL ?? initialURL ?? AppConfig.siteURL as URL? else { return }
-        load(url: target)
     }
 }
 
@@ -197,21 +164,24 @@ extension WebView {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
 
-        weak var hostController: WebViewController?
-
         private var currentToken: String = ""
         private var currentDeviceId: String = ""
-        private var currentLocationRevision: Int = 0
+        private var currentBiometricEnabled: Bool = SMCBiometricSettings.shared.isEnabled
+        private var currentHasBiometricLogin: Bool = SMCKeychain.hasLogin()
+        private var pendingCredentialSave: SMCStoredLogin? = nil
+        private var biometricPromptedForPage: String = ""
+        private var lastLoginPageURL: String = ""
 
         private var lastInjectedToken: String = ""
         private var lastInjectedDeviceId: String = ""
         private var lastInjectedURL: String = ""
-        private var lastInjectedLocationRevision: Int = -1
 
-        private var pendingCommand: WebNavigationCommand?
-        private var lastHandledCommandId: UUID?
+        private var pendingCommand: WebNavigationCommand? = nil
+        private var lastHandledCommandId: UUID? = nil
 
-        fileprivate var didFinishOnce = false
+        fileprivate var didFinishOnce: Bool = false
+
+        private let allowedHost = "stmaryslandscaping.ca"
 
         private let allowedExternalHosts: Set<String> = [
             "google.com",
@@ -222,6 +192,9 @@ extension WebView {
             "www.recaptcha.net"
         ]
 
+        weak var attachedWebView: WKWebView?
+        weak var hostViewController: WebViewController?
+
         private var lastCookieSyncAt: TimeInterval = 0
         private let cookieSyncMinInterval: TimeInterval = 1.0
 
@@ -230,112 +203,127 @@ extension WebView {
 
         private let cookieWorkQueue = DispatchQueue.global(qos: .utility)
 
-        func setCurrent(apnsToken: String, deviceId: String, locationRevision: Int) {
+        func setCurrent(apnsToken: String, deviceId: String, biometricEnabled: Bool, hasBiometricLogin: Bool) {
             currentToken = apnsToken.trimmingCharacters(in: .whitespacesAndNewlines)
             currentDeviceId = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
-            currentLocationRevision = locationRevision
+            currentBiometricEnabled = biometricEnabled
+            currentHasBiometricLogin = hasBiometricLogin
+            updateNativeFaceIDButton()
         }
 
-        func setCommand(_ command: WebNavigationCommand?) {
-            pendingCommand = command
+        func setCommand(_ command: WebNavigationCommand?) { pendingCommand = command }
+        func markCommandHandled(_ id: UUID) { lastHandledCommandId = id }
+
+        func triggerBiometricFromNativeUI() {
+            guard let webView = attachedWebView else { return }
+            promptForBiometricLoginIfNeeded(webView: webView)
         }
 
-        func markCommandHandled(_ id: UUID) {
-            lastHandledCommandId = id
-        }
-
-        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard message.name == "SMLWhoami" else { return }
-
-            let payload = makeSafeBridgePayload(from: message.body)
-            Task { @MainActor in
-                RoleState.shared.setRoleFromBridge(payload: payload)
+        private func updateNativeFaceIDButton(for webView: WKWebView? = nil) {
+            DispatchQueue.main.async { [weak self] in
+                self?.hostViewController?.setFaceIDButtonVisible(false, enabled: false)
             }
         }
 
-        private func makeSafeBridgePayload(from value: Any?) -> Any? {
-            switch value {
-            case nil:
-                return nil
+        private func layoutNativeFaceIDButton(on webView: WKWebView, enabled: Bool) {
+            DispatchQueue.main.async { [weak self] in
+                self?.hostViewController?.setFaceIDButtonVisible(false, enabled: false)
+            }
+        }
 
-            case let string as String:
-                return String(string)
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "smlWhoami" {
+                if let dict = message.body as? [String: Any] {
+                    let role = ((dict["role"] as? String) ?? "").lowercased()
+                    let authenticated =
+                        (dict["authenticated"] as? Bool) == true ||
+                        (dict["logged_in"] as? Bool) == true
 
-            case let number as NSNumber:
-                return number
+                    let isAuthorizedPayload = authenticated || (!role.isEmpty && role != "guest")
 
-            case _ as NSNull:
-                return NSNull()
+                    if isAuthorizedPayload, currentBiometricEnabled, let pendingCredentialSave {
+                        _ = SMCKeychain.save(login: pendingCredentialSave)
+                        self.pendingCredentialSave = nil
+                        self.currentHasBiometricLogin = true
+                        DispatchQueue.main.async { PushState.shared.refreshBiometricState() }
+                        self.updateNativeFaceIDButton()
+                    }
 
-            case let array as [Any]:
-                return array.map { makeSafeBridgePayload(from: $0) as Any }
-
-            case let dict as [String: Any]:
-                var safe: [String: Any] = [:]
-                for (key, value) in dict {
-                    safe[key] = makeSafeBridgePayload(from: value)
+                    DispatchQueue.main.async {
+                        RoleState.shared.setRoleFromBridge(payload: dict)
+                    }
+                } else if let s = message.body as? String {
+                    DispatchQueue.main.async {
+                        RoleState.shared.setRoleFromBridge(role: s)
+                    }
                 }
-                return safe
+                return
+            }
 
-            case let dict as NSDictionary:
-                var safe: [String: Any] = [:]
-                for case let (key as NSString, value) in dict {
-                    safe[String(key)] = makeSafeBridgePayload(from: value)
-                }
-                return safe
+            guard message.name == "smlBiometric" else { return }
+            guard let dict = message.body as? [String: Any], let action = dict["action"] as? String else { return }
+
+            switch action {
+            case "captureLogin":
+                let username = ((dict["username"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let password = (dict["password"] as? String) ?? ""
+                guard !username.isEmpty, !password.isEmpty else { return }
+                pendingCredentialSave = SMCStoredLogin(username: username, password: password)
+
+            case "trigger":
+                guard let webView = attachedWebView else { return }
+                promptForBiometricLoginIfNeeded(webView: webView)
+
+            case "clear":
+                pendingCredentialSave = nil
+                SMCKeychain.deleteLogin()
+                currentHasBiometricLogin = false
+                DispatchQueue.main.async { PushState.shared.refreshBiometricState() }
+                updateNativeFaceIDButton()
 
             default:
-                return String(describing: value!)
+                break
             }
         }
 
         private func isAllowedExternalHost(_ host: String) -> Bool {
             if allowedExternalHosts.contains(host) { return true }
-            return allowedExternalHosts.contains(where: { host.hasSuffix("." + $0) })
+            for h in allowedExternalHosts {
+                if host.hasSuffix("." + h) { return true }
+            }
+            return false
         }
 
         func isExternalURL(_ url: URL) -> Bool {
             let scheme = (url.scheme ?? "").lowercased()
-            guard scheme == "http" || scheme == "https" else { return false }
+            if scheme != "http" && scheme != "https" { return false }
 
             let host = (url.host ?? "").lowercased()
-            guard !host.isEmpty else { return false }
+            if host.isEmpty { return false }
 
-            if AppConfig.isInternalHost(host) { return false }
+            if host == allowedHost || host.hasSuffix("." + allowedHost) { return false }
             if isAllowedExternalHost(host) { return false }
 
             return true
         }
 
-        func shouldOpenExternally(_ url: URL) -> Bool {
-            let scheme = (url.scheme ?? "").lowercased()
-
-            if scheme == "tel" || scheme == "mailto" || scheme == "sms" || scheme == "maps" {
-                return true
-            }
-
-            if scheme == "http" || scheme == "https" {
-                return isExternalURL(url)
-            }
-
-            return UIApplication.shared.canOpenURL(url)
-        }
-
-        private func openExternally(_ url: URL) {
-            DispatchQueue.main.async {
-                UIApplication.shared.open(url, options: [:])
-            }
-        }
-
         func applyCommandIfNeeded(webView: WKWebView) {
             guard let cmd = pendingCommand else { return }
-            guard lastHandledCommandId != cmd.id else { return }
+            if lastHandledCommandId == cmd.id { return }
 
             lastHandledCommandId = cmd.id
+            pendingCommand = nil
 
-            if shouldOpenExternally(cmd.url) { return }
+            if isExternalURL(cmd.url) {
+                openExternally(cmd.url)
+                return
+            }
 
-            hostController?.load(url: cmd.url, in: webView)
+            if let current = webView.url, urlsEffectivelyEqual(current, cmd.url) {
+                return
+            }
+
+            webView.load(URLRequest(url: cmd.url))
         }
 
         func webView(_ webView: WKWebView,
@@ -347,15 +335,31 @@ extension WebView {
                 return
             }
 
-            if shouldOpenExternally(u), navigationAction.navigationType == .linkActivated {
+            let scheme = (u.scheme ?? "").lowercased()
+
+            if scheme == "tel" || scheme == "mailto" || scheme == "sms" || scheme == "facetime" || scheme == "facetime-audio" {
                 openExternally(u)
                 decisionHandler(.cancel)
                 return
             }
 
-            let scheme = (u.scheme ?? "").lowercased()
-            if scheme != "http" && scheme != "https" && UIApplication.shared.canOpenURL(u) {
-                openExternally(u)
+            if scheme != "http" && scheme != "https" {
+                decisionHandler(.allow)
+                return
+            }
+
+            if isExternalURL(u) {
+                if navigationAction.navigationType == .linkActivated || navigationAction.targetFrame == nil {
+                    openExternally(u)
+                    decisionHandler(.cancel)
+                    return
+                }
+                decisionHandler(.allow)
+                return
+            }
+
+            if navigationAction.targetFrame == nil {
+                webView.load(navigationAction.request)
                 decisionHandler(.cancel)
                 return
             }
@@ -367,60 +371,54 @@ extension WebView {
                      createWebViewWith configuration: WKWebViewConfiguration,
                      for navigationAction: WKNavigationAction,
                      windowFeatures: WKWindowFeatures) -> WKWebView? {
-
-            guard navigationAction.targetFrame == nil else { return nil }
             guard let u = navigationAction.request.url else { return nil }
 
-            if shouldOpenExternally(u) {
+            let scheme = (u.scheme ?? "").lowercased()
+            if scheme == "tel" || scheme == "mailto" || scheme == "sms" || scheme == "facetime" || scheme == "facetime-audio" {
                 openExternally(u)
-            } else {
-                hostController?.load(url: u, in: webView)
+                return nil
             }
 
+            if isExternalURL(u) {
+                openExternally(u)
+                return nil
+            }
+
+            attachedWebView?.load(navigationAction.request)
             return nil
         }
 
-        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-            hostController?.handleNavigationStart()
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            let ns = error as NSError
+            if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled { return }
+            print("WEBVIEW didFail:", error.localizedDescription)
         }
 
-        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-            hostController?.handleNavigationCommitted()
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            let ns = error as NSError
+            if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled { return }
+            print("WEBVIEW didFailProvisionalNavigation:", error.localizedDescription)
         }
 
-        private func pageRequiresNativeLocation(_ webView: WKWebView) -> Bool {
-            let path = webView.url?.path.lowercased() ?? ""
-            return path.contains("/account-workday")
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            print("WEBVIEW process terminated; reloading current page")
+            webView.reload()
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             didFinishOnce = true
-            hostController?.handleNavigationFinished()
 
             DispatchQueue.main.async { [weak self, weak webView] in
                 guard let self, let webView else { return }
 
-                if self.pageRequiresNativeLocation(webView) {
-                    LocationState.shared.prepareForWorkdayPage()
-                }
-
                 self.applyCommandIfNeeded(webView: webView)
                 self.tryInjectIntoPage(webView: webView, force: true)
-                self.requestWhoamiViaWebView(webView: webView)
                 self.syncCookiesToSharedStorage(webView: webView)
+                self.requestWhoamiViaWebView(webView: webView)
+                self.injectBiometricUIIfNeeded(webView: webView)
+                self.maybePersistPendingLoginAfterSuccessfulNavigation(webView: webView)
+                self.updateNativeFaceIDButton(for: webView)
             }
-        }
-
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            hostController?.handleNavigationFailure(message: error.localizedDescription)
-        }
-
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-            hostController?.handleNavigationFailure(message: error.localizedDescription)
-        }
-
-        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-            hostController?.handleNavigationFailure(message: "The page process stopped. Tap Retry.")
         }
 
         private func requestWhoamiViaWebView(webView: WKWebView) {
@@ -428,71 +426,66 @@ extension WebView {
             if now - lastWhoamiAt < whoamiMinInterval { return }
             lastWhoamiAt = now
 
-            guard let host = webView.url?.host?.lowercased(), AppConfig.isInternalHost(host) else { return }
+            guard let currentURL = webView.url else { return }
+            let host = (currentURL.host ?? "").lowercased()
+            if !(host == allowedHost || host.hasSuffix("." + allowedHost)) { return }
 
-            let js = """
+            let script = #"""
             (function () {
-              function safeText(selector) {
+              var bodyClass = '';
+              try {
+                bodyClass = document.body ? (document.body.className || '') : '';
+              } catch (e) {}
+
+              var authGuess = false;
+              try {
+                authGuess =
+                  /(^|\s)logged-in(\s|$)/.test(bodyClass) ||
+                  !!document.querySelector('a[href*="logout"], a[href*="log-out"], a[href*="my-account"]');
+              } catch (e) {}
+
+              function postFallback() {
                 try {
-                  var node = document.querySelector(selector);
-                  return node && node.textContent ? node.textContent.trim() : '';
-                } catch (e) {
-                  return '';
-                }
+                  window.webkit.messageHandlers.smlWhoami.postMessage({
+                    authenticated: authGuess,
+                    current_path: (location && location.pathname) ? location.pathname : '',
+                    href: (location && location.href) ? location.href : '',
+                    body_class: bodyClass
+                  });
+                } catch (e) {}
               }
-
-              function collectDomPayload() {
-                var body = document.body;
-                var classes = body ? body.className : '';
-                var loggedIn = body ? body.classList.contains('logged-in') : false;
-                var roleCandidates = [
-                  safeText('.sml-account-sidebar__eyebrow'),
-                  safeText('.sml-account-badge'),
-                  safeText('.sml-account-sidebar__meta'),
-                  safeText('.sml-account-eyebrow')
-                ].filter(function (value) { return !!value; });
-
-                return {
-                  role_source: 'dom',
-                  role_candidates: roleCandidates,
-                  role_label: roleCandidates.length ? roleCandidates[0] : '',
-                  body_class: classes,
-                  loggedIn: loggedIn,
-                  path: window.location.pathname || '',
-                  href: window.location.href || ''
-                };
-              }
-
-              function send(payload) {
-                try { window.webkit.messageHandlers.SMLWhoami.postMessage(payload); } catch (e) {}
-              }
-
-              var domPayload = collectDomPayload();
 
               try {
                 fetch('/wp-json/sml/v1/whoami', { credentials: 'include' })
-                  .then(function (r) {
-                    if (!r.ok) { throw new Error('HTTP ' + r.status); }
-                    return r.json();
+                  .then(function (response) {
+                    return response.json().catch(function () { return {}; });
                   })
-                  .then(function (d) {
-                    if (d && typeof d === 'object') {
-                      d.role_source = 'whoami';
-                      send(d);
-                    } else {
-                      send({ role: String(d || ''), role_source: 'whoami' });
+                  .then(function (data) {
+                    try {
+                      data = data || {};
+                      data.current_path = (location && location.pathname) ? location.pathname : '';
+                      data.href = (location && location.href) ? location.href : '';
+                      data.body_class = bodyClass;
+
+                      if (typeof data.authenticated === 'undefined' && typeof data.logged_in === 'undefined') {
+                        data.authenticated = authGuess;
+                      }
+
+                      window.webkit.messageHandlers.smlWhoami.postMessage(data);
+                    } catch (e) {
+                      postFallback();
                     }
-                    send(domPayload);
                   })
                   .catch(function () {
-                    send(domPayload);
+                    postFallback();
                   });
               } catch (e) {
-                send(domPayload);
+                postFallback();
               }
             })();
-            """
-            webView.evaluateJavaScript(js, completionHandler: nil)
+            """#
+
+            webView.evaluateJavaScript(script, completionHandler: nil)
         }
 
         private func syncCookiesToSharedStorage(webView: WKWebView) {
@@ -500,19 +493,20 @@ extension WebView {
             if now - lastCookieSyncAt < cookieSyncMinInterval { return }
             lastCookieSyncAt = now
 
-            guard let host = webView.url?.host?.lowercased(), AppConfig.isInternalHost(host) else { return }
+            guard let currentURL = webView.url else { return }
+            let host = (currentURL.host ?? "").lowercased()
+            if !(host == allowedHost || host.hasSuffix("." + allowedHost)) { return }
 
             let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
             cookieStore.getAllCookies { [weak self] cookies in
                 guard let self else { return }
-                guard !cookies.isEmpty else { return }
 
                 self.cookieWorkQueue.async {
                     let shared = HTTPCookieStorage.shared
-                    for cookie in cookies {
-                        let domain = cookie.domain.lowercased()
-                        if AppConfig.isInternalHost(domain) || AppConfig.siteHost.hasSuffix(domain) {
-                            shared.setCookie(cookie)
+                    for c in cookies {
+                        let d = c.domain.lowercased()
+                        if d == self.allowedHost || d.hasSuffix("." + self.allowedHost) || self.allowedHost.hasSuffix(d) {
+                            shared.setCookie(c)
                         }
                     }
                     DispatchQueue.main.async {
@@ -524,49 +518,77 @@ extension WebView {
 
         func tryInjectIntoPage(webView: WKWebView, force: Bool) {
             let token = currentToken
-            guard !token.isEmpty else { return }
+            let did = currentDeviceId
+            let device = did.isEmpty ? "ios-device" : did
+            let biometricEnabled = currentBiometricEnabled
+            let hasBiometricLogin = currentHasBiometricLogin
 
-            let device = currentDeviceId.isEmpty ? "ios-device" : currentDeviceId
             let page = webView.url?.absoluteString ?? ""
 
-            let locationPayload = LocationState.shared.bridgePayload()
-            let locationRevision = currentLocationRevision
-
-            if !force &&
-                token == lastInjectedToken &&
-                device == lastInjectedDeviceId &&
-                page == lastInjectedURL &&
-                locationRevision == lastInjectedLocationRevision {
-                return
+            if !force {
+                if token == lastInjectedToken && device == lastInjectedDeviceId && page == lastInjectedURL { return }
             }
 
             lastInjectedToken = token
             lastInjectedDeviceId = device
             lastInjectedURL = page
-            lastInjectedLocationRevision = locationRevision
 
             let tokenJS = jsString(token)
             let deviceJS = jsString(device)
-            let bundleIdJS = jsString(AppConfig.bundleId)
-            let appVersionJS = jsString(AppConfig.appVersion)
-            let buildNumberJS = jsString(AppConfig.buildNumber)
-            let environmentJS = jsString(AppConfig.pushEnvironment)
-            let locationJS = jsObjectString(locationPayload)
-            let cssJS = jsString("input, textarea, [contenteditable=\"true\"] { caret-color: #438239 !important; }")
+            let biometricEnabledJS = biometricEnabled ? "true" : "false"
+            let hasBiometricLoginJS = hasBiometricLogin ? "true" : "false"
+
+            let css = """
+            input, textarea, [contenteditable=\"true\"] { caret-color: #438239 !important; }
+            """
+            let cssJS = jsString(css)
 
             let js = """
             (function () {
               window.SML_APP = window.SML_APP || {};
               window.SML_APP.apnsToken = \(tokenJS);
-              window.SML_APP.deviceId  = \(deviceJS);
-              window.SML_APP.bundleId = \(bundleIdJS);
-              window.SML_APP.appVersion = \(appVersionJS);
-              window.SML_APP.buildNumber = \(buildNumberJS);
-              window.SML_APP.pushEnvironment = \(environmentJS);
-              window.SML_APP.location = \(locationJS);
+              window.SML_APP.deviceId = \(deviceJS);
+              window.SML_APP.isApp = true;
+              window.SML_APP.platform = "ios";
+              window.SML_APP.biometricEnabled = \(biometricEnabledJS);
+              window.SML_APP.hasBiometricLogin = \(hasBiometricLoginJS);
+              window.SML_APP.triggerBiometricLogin = function () {
+                try { window.webkit.messageHandlers.smlBiometric.postMessage({ action: 'trigger' }); } catch (e) {}
+              };
+              window.SML_APP.clearBiometricLogin = function () {
+                try { window.webkit.messageHandlers.smlBiometric.postMessage({ action: 'clear' }); } catch (e) {}
+              };
               window.SML_APP.__injectedAt = Date.now();
 
-              window.SML_LOCATION = \(locationJS);
+              try {
+                document.documentElement.setAttribute("data-sml-app", "1");
+                document.documentElement.setAttribute("data-sml-platform", "ios");
+              } catch (e) {}
+
+              try {
+                window.dispatchEvent(new CustomEvent("sml:app-ready", {
+                  detail: {
+                    platform: "ios",
+                    biometricEnabled: window.SML_APP.biometricEnabled,
+                    hasBiometricLogin: window.SML_APP.hasBiometricLogin
+                  }
+                }));
+              } catch (e) {}
+
+              try {
+                setTimeout(function () {
+                  try {
+                    window.dispatchEvent(new CustomEvent("sml:app-ready", {
+                      detail: {
+                        platform: "ios",
+                        biometricEnabled: window.SML_APP.biometricEnabled,
+                        hasBiometricLogin: window.SML_APP.hasBiometricLogin
+                      }
+                    }));
+                  } catch (e2) {}
+                }, 150);
+              } catch (e) {}
+
               window.SML_PUSH_TOKEN = \(tokenJS);
               window.SML_PUSH_DEVICE_ID = \(deviceJS);
 
@@ -580,22 +602,174 @@ extension WebView {
                 }
               } catch (e) {}
 
-              function tryRegister() {
-                if (window.SML_PUSH_REGISTER) {
-                  try { window.SML_PUSH_REGISTER(false); } catch (e) {}
-                  return true;
-                }
-                return false;
-              }
+              try {
+                if (!window.__smlBiometricLoginCaptureBound) {
+                  window.__smlBiometricLoginCaptureBound = true;
 
-              if (!tryRegister()) {
-                setTimeout(tryRegister, 500);
-                setTimeout(tryRegister, 1500);
-                setTimeout(tryRegister, 3000);
+                  var captureAndSend = function (form) {
+                    try {
+                      form = form || document.querySelector('form');
+                      if (!form) return;
+
+                      var user = form.querySelector('input[name="log"], input[name="username"], input[type="email"], input[type="text"]');
+                      var pass = form.querySelector('input[name="pwd"], input[name="password"], input[type="password"]');
+                      if (!user || !pass) return;
+
+                      var username = (user.value || '').trim();
+                      var password = pass.value || '';
+                      if (!username || !password) return;
+
+                      window.webkit.messageHandlers.smlBiometric.postMessage({
+                        action: 'captureLogin',
+                        username: username,
+                        password: password
+                      });
+                    } catch (e) {}
+                  };
+
+                  document.addEventListener('submit', function (ev) {
+                    captureAndSend(ev.target);
+                  }, true);
+
+                  document.addEventListener('click', function (ev) {
+                    try {
+                      var target = ev.target && ev.target.closest
+                        ? ev.target.closest('button[type="submit"], input[type="submit"], .woocommerce-form-login__submit, .button, .btn')
+                        : null;
+                      if (!target) return;
+
+                      var form = target.form || target.closest('form');
+                      captureAndSend(form);
+                    } catch (e) {}
+                  }, true);
+                }
+              } catch (e) {}
+
+              if (window.SML_PUSH_REGISTER) {
+                try { window.SML_PUSH_REGISTER(); } catch (e) {}
               }
             })();
             """
+
             webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+
+        private func injectBiometricUIIfNeeded(webView: WKWebView) {
+            let urlString = webView.url?.absoluteString.lowercased() ?? ""
+            let path = webView.url?.path.lowercased() ?? ""
+            let looksLikeLogin = path.contains("/login") || urlString.contains("wp-login")
+            if looksLikeLogin {
+                lastLoginPageURL = webView.url?.absoluteString ?? ""
+            } else {
+                biometricPromptedForPage = ""
+            }
+            tryInjectIntoPage(webView: webView, force: true)
+            updateNativeFaceIDButton(for: webView)
+        }
+
+        private func maybePersistPendingLoginAfterSuccessfulNavigation(webView: WKWebView) {
+            guard let pendingCredentialSave else { return }
+
+            let urlString = webView.url?.absoluteString.lowercased() ?? ""
+            let path = webView.url?.path.lowercased() ?? ""
+            let looksLikeLogin = path.contains("/login") || urlString.contains("wp-login")
+            if looksLikeLogin { return }
+
+            if currentBiometricEnabled {
+                _ = SMCKeychain.save(login: pendingCredentialSave)
+                self.pendingCredentialSave = nil
+                currentHasBiometricLogin = true
+                DispatchQueue.main.async { PushState.shared.refreshBiometricState() }
+                updateNativeFaceIDButton(for: webView)
+                return
+            }
+
+            guard BiometricAuthManager.shared.canUseBiometrics() else {
+                self.pendingCredentialSave = nil
+                return
+            }
+
+            promptToEnableBiometricLogin(using: pendingCredentialSave)
+        }
+
+        private func promptToEnableBiometricLogin(using login: SMCStoredLogin) {
+            guard let host = hostViewController else { return }
+            guard host.presentedViewController == nil else { return }
+
+            let alert = UIAlertController(
+                title: "Use Face ID?",
+                message: "Save this login so you can sign in faster next time with Face ID.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "Not now", style: .cancel) { [weak self] _ in
+                self?.pendingCredentialSave = nil
+            })
+            alert.addAction(UIAlertAction(title: "Use Face ID", style: .default) { [weak self] _ in
+                guard let self else { return }
+                _ = SMCKeychain.save(login: login)
+                self.pendingCredentialSave = nil
+                self.currentBiometricEnabled = true
+                self.currentHasBiometricLogin = true
+                DispatchQueue.main.async {
+                    PushState.shared.setBiometricEnabled(true)
+                    PushState.shared.refreshBiometricState()
+                }
+                self.updateNativeFaceIDButton()
+            })
+            DispatchQueue.main.async {
+                host.present(alert, animated: true)
+            }
+        }
+
+        private func promptForBiometricLoginIfNeeded(webView: WKWebView) {
+            guard currentBiometricEnabled else { return }
+            guard let login = SMCKeychain.readLogin() else { return }
+
+            BiometricAuthManager.shared.authenticate(reason: "Sign in with Face ID") { [weak self, weak webView] success in
+                guard let self, let webView, success else { return }
+                self.fillAndSubmitLogin(webView: webView, login: login)
+            }
+        }
+
+        private func fillAndSubmitLogin(webView: WKWebView, login: SMCStoredLogin) {
+            let userJS = jsString(login.username)
+            let passJS = jsString(login.password)
+            let js = """
+            (function () {
+              try {
+                var form = document.querySelector('form');
+                var user = document.querySelector('input[name="log"], input[name="username"], input[type="email"], input[type="text"]');
+                var pass = document.querySelector('input[name="pwd"], input[name="password"], input[type="password"]');
+                if (!user || !pass) return false;
+                user.focus(); user.value = \(userJS); user.dispatchEvent(new Event('input', { bubbles: true })); user.dispatchEvent(new Event('change', { bubbles: true }));
+                pass.focus(); pass.value = \(passJS); pass.dispatchEvent(new Event('input', { bubbles: true })); pass.dispatchEvent(new Event('change', { bubbles: true }));
+                if (!form) { form = user.form || pass.form; }
+                if (form) {
+                  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                  form.submit();
+                  return true;
+                }
+                var btn = document.querySelector('button[type="submit"], input[type="submit"]');
+                if (btn) { btn.click(); return true; }
+                return false;
+              } catch (e) { return false; }
+            })();
+            """
+            webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+
+        private func openExternally(_ url: URL) {
+            DispatchQueue.main.async {
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            }
+        }
+
+        private func urlsEffectivelyEqual(_ lhs: URL, _ rhs: URL) -> Bool {
+            var l = URLComponents(url: lhs, resolvingAgainstBaseURL: false)
+            var r = URLComponents(url: rhs, resolvingAgainstBaseURL: false)
+            l?.fragment = nil
+            r?.fragment = nil
+            return l?.string == r?.string
         }
 
         private func jsString(_ value: String) -> String {
@@ -604,20 +778,12 @@ extension WebView {
                 var str = String(data: data, encoding: .utf8)
             else { return "\"\"" }
 
-            if str.hasPrefix("[") && str.hasSuffix("]") {
+            if str.count >= 4, str.hasPrefix("["), str.hasSuffix("]") {
                 str.removeFirst()
                 str.removeLast()
+                return str
             }
-            return str
-        }
-
-        private func jsObjectString(_ value: Any) -> String {
-            guard JSONSerialization.isValidJSONObject(value),
-                  let data = try? JSONSerialization.data(withJSONObject: value, options: []),
-                  let str = String(data: data, encoding: .utf8) else {
-                return "{}"
-            }
-            return str
+            return "\"\""
         }
     }
 }

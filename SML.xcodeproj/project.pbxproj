@@ -18,7 +18,6 @@
 		D5A7A2182F64B0BA00BC6815 /* MoreRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7A2172F64B0BA00BC6815 /* MoreRootView.swift */; };
 		D5A7A21A2F64B0D100BC6815 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7A2192F64B0D100BC6815 /* AppDelegate.swift */; };
 		D5A7A21C2F64B0F700BC6815 /* Launch Screen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = D5A7A21B2F64B0F700BC6815 /* Launch Screen.storyboard */; };
-		D5BA7C402F64C27100E09798 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5BA7C3F2F64C27100E09798 /* AppConfig.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,7 +33,6 @@
 		D5A7A2172F64B0BA00BC6815 /* MoreRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreRootView.swift; sourceTree = "<group>"; };
 		D5A7A2192F64B0D100BC6815 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		D5A7A21B2F64B0F700BC6815 /* Launch Screen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = "Launch Screen.storyboard"; sourceTree = "<group>"; };
-		D5BA7C3F2F64C27100E09798 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		D5BA7C412F64C52300E09798 /* SML.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SML.entitlements; sourceTree = "<group>"; };
 		D5BA7C422F64C52E00E09798 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -71,7 +69,6 @@
 			children = (
 				D5BA7C422F64C52E00E09798 /* Info.plist */,
 				D5BA7C412F64C52300E09798 /* SML.entitlements */,
-				D5BA7C3F2F64C27100E09798 /* AppConfig.swift */,
 				D5A7A2112F64AFFC00BC6815 /* WebView.swift */,
 				D5A7A2032F64AF2A00BC6815 /* SMLApp.swift */,
 				D5A7A2052F64AF2A00BC6815 /* ContentView.swift */,
@@ -166,7 +163,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D5BA7C402F64C27100E09798 /* AppConfig.swift in Sources */,
 				D5A7A2122F64AFFC00BC6815 /* WebView.swift in Sources */,
 				D5A7A2182F64B0BA00BC6815 /* MoreRootView.swift in Sources */,
 				D5A7A2162F64B0A200BC6815 /* NotificationsView.swift in Sources */,

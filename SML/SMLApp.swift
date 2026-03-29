@@ -1,6 +1,6 @@
 //
-//  SMLApp.swift
-//  sml
+//  SMCApp.swift
+//  SMC
 //
 //  Версия: 1.0.0
 //  Автор: Nuvren.com
@@ -14,7 +14,7 @@
 import SwiftUI
 
 @main
-struct SMLApp: App {
+struct SMCApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {

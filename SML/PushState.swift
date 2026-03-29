@@ -1,6 +1,6 @@
 //
 //  PushState.swift
-//  sml
+//  SMC
 //
 //  Version: 1.0.0
 //  Author: Nuvren.com
@@ -8,14 +8,105 @@
 //  Назначение:
 //  - Источник правды для APNS token + deviceId
 //  - При тапе по push: парсит payload (userInfo["sml"]) и публикует openCommand
-//  Fix (external links):
-//  - Ничего не ломаем: PushState по-прежнему строит URL
-//  - Внешние ссылки НЕ блокируем тут (это делает WebView, чтобы не подменять Home)
+//  - Хранит Face ID настройки логина
 //
-
 
 import Foundation
 import UIKit
+import Combine
+import Security
+import LocalAuthentication
+
+final class SMCBiometricSettings {
+    static let shared = SMCBiometricSettings()
+    private let enabledKey = "sml.faceid.enabled"
+    private init() {}
+    var isEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: enabledKey) }
+        set { UserDefaults.standard.set(newValue, forKey: enabledKey) }
+    }
+}
+
+struct SMCStoredLogin: Codable {
+    let username: String
+    let password: String
+}
+
+enum SMCKeychain {
+    private static let service = "ca.stmaryslandscaping.app.biometric-login"
+    private static let account = "primary-login"
+
+    static func save(login: SMCStoredLogin) -> Bool {
+        guard let data = try? JSONEncoder().encode(login) else { return false }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(query as CFDictionary)
+        let add: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
+    }
+
+    static func readLogin() -> SMCStoredLogin? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else { return nil }
+        return try? JSONDecoder().decode(SMCStoredLogin.self, from: data)
+    }
+
+    static func deleteLogin() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
+    static func hasLogin() -> Bool {
+        readLogin() != nil
+    }
+}
+
+final class BiometricAuthManager {
+    static let shared = BiometricAuthManager()
+    private init() {}
+
+    func canUseBiometrics() -> Bool {
+        let context = LAContext()
+        var error: NSError?
+        return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+    }
+
+    func authenticate(reason: String, completion: @escaping (Bool) -> Void) {
+        let context = LAContext()
+        context.localizedCancelTitle = "Cancel"
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+            completion(false)
+            return
+        }
+        context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, _ in
+            DispatchQueue.main.async {
+                completion(success)
+            }
+        }
+    }
+}
 
 final class PushState: ObservableObject {
 
@@ -23,6 +114,9 @@ final class PushState: ObservableObject {
 
     @Published private(set) var apnsToken: String = ""
     @Published private(set) var deviceId: String = ""
+
+    @Published var biometricEnabled: Bool = SMCBiometricSettings.shared.isEnabled
+    @Published var hasBiometricLogin: Bool = SMCKeychain.hasLogin()
 
     struct PushOpenCommand {
         let id: UUID
@@ -32,33 +126,35 @@ final class PushState: ObservableObject {
         let meta: [String: Any]
     }
 
-    @Published var openCommand: PushOpenCommand?
+    @Published var openCommand: PushOpenCommand? = nil
 
-    private let base = AppConfig.siteURL
-    private let tokenKey = "sml.apns.token"
-    private let deviceIdKey = "sml.device.id"
+    private let base = URL(string: "https://stmaryslandscaping.ca")!
 
     private init() {
-        let defaults = UserDefaults.standard
-        let storedDeviceId = defaults.string(forKey: deviceIdKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let fallbackDeviceId = UIDevice.current.identifierForVendor?.uuidString ?? ""
-        let resolvedDeviceId = !storedDeviceId.isEmpty ? storedDeviceId : (!fallbackDeviceId.isEmpty ? fallbackDeviceId : "ios-device")
-
-        deviceId = resolvedDeviceId
-        defaults.set(resolvedDeviceId, forKey: deviceIdKey)
-
-        let storedToken = defaults.string(forKey: tokenKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !storedToken.isEmpty {
-            apnsToken = storedToken
-        }
+        let did = UIDevice.current.identifierForVendor?.uuidString ?? ""
+        deviceId = did.isEmpty ? "ios-device" : did
     }
 
     func setApnsToken(_ token: String) {
         let t = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty else { return }
-        UserDefaults.standard.set(t, forKey: tokenKey)
-        guard apnsToken != t else { return }
+        if t.isEmpty { return }
+        if apnsToken == t { return }
         apnsToken = t
+    }
+
+    func setBiometricEnabled(_ enabled: Bool) {
+        biometricEnabled = enabled
+        SMCBiometricSettings.shared.isEnabled = enabled
+
+        if !enabled {
+            SMCKeychain.deleteLogin()
+            hasBiometricLogin = false
+        }
+    }
+
+    func refreshBiometricState() {
+        biometricEnabled = SMCBiometricSettings.shared.isEnabled
+        hasBiometricLogin = SMCKeychain.hasLogin()
     }
 
     func consumeOpenCommand(_ cmd: PushOpenCommand) {
@@ -67,13 +163,15 @@ final class PushState: ObservableObject {
         }
     }
 
+    // MARK: - Remote push payload
+
     func handleRemoteNotification(userInfo: [AnyHashable: Any]) {
         let sml = extractDict(userInfo["sml"])
+
         let type = (extractString(sml["type"]) ?? "custom").trimmingCharacters(in: .whitespacesAndNewlines)
         let event = (extractString(sml["event"]) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let deeplinkStr = extractString(sml["deeplink"])
         let meta = extractDict(sml["meta"])
-
         let url = buildURL(deeplink: deeplinkStr, type: type, meta: meta)
 
         openCommand = PushOpenCommand(
@@ -85,9 +183,10 @@ final class PushState: ObservableObject {
         )
     }
 
+    // MARK: - URL builder
+
     private func buildURL(deeplink: String?, type: String, meta: [String: Any]) -> URL? {
         let s = (deeplink ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-
         if !s.isEmpty {
             if s.lowercased().hasPrefix("https://") || s.lowercased().hasPrefix("http://") {
                 return URL(string: s)
@@ -108,22 +207,39 @@ final class PushState: ObservableObject {
 
         let t = type.lowercased()
 
-        if t == "requests" {
-            if let oid = extractInt(meta["order_id"]), oid > 0 {
-                return AppConfig.url("/account/?order_id=\(oid)")
+        if t == "tasks" {
+            if let taskId = extractInt(meta["task_id"]), taskId > 0 {
+                return URL(string: "/all-tasks/?task_id=\(taskId)", relativeTo: base)?.absoluteURL
             }
-            return AppConfig.url("/account/")
+            return URL(string: "/all-tasks/", relativeTo: base)?.absoluteURL
+        }
+
+        if t == "report" {
+            if let reportId = extractInt(meta["report_id"]), reportId > 0 {
+                return URL(string: "/report/?report_id=\(reportId)", relativeTo: base)?.absoluteURL
+            }
+            return URL(string: "/report/", relativeTo: base)?.absoluteURL
+        }
+
+        if t == "paystubs" || t == "payroll" {
+            return URL(string: "/payroll-review/", relativeTo: base)?.absoluteURL
         }
 
         if t == "invoices" {
-            if let iid = extractInt(meta["invoice_id"]), iid > 0 {
-                return AppConfig.url("/account-invoices/?invoice_id=\(iid)")
+            if let invoiceId = extractInt(meta["invoice_id"]), invoiceId > 0 {
+                return URL(string: "/invoices/?invoice_id=\(invoiceId)", relativeTo: base)?.absoluteURL
             }
-            return AppConfig.url("/account-invoices/")
+            return URL(string: "/invoices/", relativeTo: base)?.absoluteURL
         }
 
-        return AppConfig.url("/account/")
+        if t == "requests" || t == "orders" {
+            return URL(string: "/my-requests/", relativeTo: base)?.absoluteURL
+        }
+
+        return URL(string: "/", relativeTo: base)?.absoluteURL
     }
+
+    // MARK: - Helpers
 
     private func extractDict(_ value: Any?) -> [String: Any] {
         if let d = value as? [String: Any] { return d }

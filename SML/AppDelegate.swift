@@ -1,6 +1,6 @@
 //
 //  AppDelegate.swift
-//  sml
+//  SMC
 //
 //  Version: 1.0.0
 //  Author: Nuvren.com
@@ -27,23 +27,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         center.delegate = self
 
         // ✅ 1) Запрос разрешения (если ещё не спрашивали) + регистрация в APNs
-        refreshPushRegistration(application: application, center: center)
-
-        // ✅ 2) Если приложение запущено тапом по push — обработаем deeplink сразу
-        if let userInfo = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
-            handleRemoteNotification(userInfo: userInfo)
-        }
-
-        return true
-    }
-
-
-    private func refreshPushRegistration(application: UIApplication, center: UNUserNotificationCenter = .current()) {
         center.getNotificationSettings { settings in
             let st = settings.authorizationStatus
 
             switch st {
             case .notDetermined:
+                // первый запуск -> попросим разрешение
                 center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, err in
                     if let err = err {
                         print("PUSH AUTH ERROR:", err.localizedDescription)
@@ -59,22 +48,28 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 }
 
             case .authorized, .provisional, .ephemeral:
+                // уже разрешено -> просто регистрируемся в APNs
                 DispatchQueue.main.async {
                     application.registerForRemoteNotifications()
                 }
 
             case .denied:
+                // пользователь запретил -> ничего не делаем
                 print("PUSH AUTH: denied")
 
             @unknown default:
                 break
             }
         }
+
+        // ✅ 2) Если приложение запущено тапом по push — обработаем deeplink сразу
+        if let userInfo = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+            handleRemoteNotification(userInfo: userInfo)
+        }
+
+        return true
     }
 
-    func applicationDidBecomeActive(_ application: UIApplication) {
-        refreshPushRegistration(application: application)
-    }
     // Баннеры когда приложение активно
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
@@ -96,16 +91,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         DispatchQueue.main.async {
             PushState.shared.handleRemoteNotification(userInfo: userInfo)
         }
-    }
-
-
-    func application(
-        _ application: UIApplication,
-        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
-        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
-    ) {
-        handleRemoteNotification(userInfo: userInfo)
-        completionHandler(.newData)
     }
 
     // APNs token получен

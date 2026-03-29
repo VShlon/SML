@@ -15,35 +15,32 @@
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="LaunchLogo" translatesAutoresizingMaskIntoConstraints="NO" id="6Ni-Of-VkH">
-                                <rect key="frame" x="35" y="297" width="323" height="247"/>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="LaunchLogo" translatesAutoresizingMaskIntoConstraints="NO" id="NUR-XP-PKA">
+                                <rect key="frame" x="77" y="306" width="240" height="240"/>
                                 <constraints>
-                                    <constraint firstAttribute="width" secondItem="6Ni-Of-VkH" secondAttribute="height" multiplier="17:13" id="k5Y-ND-UER"/>
-                                    <constraint firstAttribute="width" constant="323" id="sqt-fn-xTp"/>
+                                    <constraint firstAttribute="width" constant="240" id="UIX-sT-h4k"/>
+                                    <constraint firstAttribute="height" constant="240" id="gii-wt-7sa"/>
                                 </constraints>
                             </imageView>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="Bcu-3y-fUS"/>
                         <color key="backgroundColor" red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
-                            <constraint firstAttribute="bottom" secondItem="6Ni-Of-VkH" secondAttribute="bottom" constant="272" id="Itz-Jc-HOD"/>
-                            <constraint firstItem="6Ni-Of-VkH" firstAttribute="top" secondItem="Bcu-3y-fUS" secondAttribute="top" constant="274" id="KhG-Sg-VXf"/>
-                            <constraint firstItem="6Ni-Of-VkH" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="abq-wx-SNg"/>
-                            <constraint firstItem="6Ni-Of-VkH" firstAttribute="leading" secondItem="Bcu-3y-fUS" secondAttribute="leading" constant="35" id="f1i-r4-5FE"/>
-                            <constraint firstItem="6Ni-Of-VkH" firstAttribute="top" secondItem="Bcu-3y-fUS" secondAttribute="top" constant="238" id="yqD-Vc-S9t"/>
+                            <constraint firstItem="NUR-XP-PKA" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="31Y-t9-nZe"/>
+                            <constraint firstItem="NUR-XP-PKA" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="OYH-SY-r2K"/>
+                            <constraint firstItem="NUR-XP-PKA" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="TfN-MN-qFm"/>
+                            <constraint firstItem="NUR-XP-PKA" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="ZKR-nB-8eg"/>
+                            <constraint firstItem="NUR-XP-PKA" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="aEG-Fi-9lZ"/>
+                            <constraint firstItem="NUR-XP-PKA" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="ml5-s1-xUo"/>
                         </constraints>
                     </view>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="iYj-Kq-Ea1" userLabel="First Responder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="52.671755725190835" y="374.64788732394368"/>
+            <point key="canvasLocation" x="53" y="375"/>
         </scene>
     </scenes>
-    <color key="tintColor" systemColor="systemGreenColor"/>
     <resources>
-        <image name="LaunchLogo" width="2048" height="780"/>
-        <systemColor name="systemGreenColor">
-            <color red="0.20392156859999999" green="0.78039215689999997" blue="0.34901960780000002" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-        </systemColor>
+        <image name="LaunchLogo" width="1024" height="1024"/>
     </resources>
 </document>

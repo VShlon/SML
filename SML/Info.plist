@@ -2,13 +2,24 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Use Face ID to unlock the SML app.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Allow location access to start and end the workday at Shop.</string>
+    <key>CFBundleDisplayName</key>
+    <string>SML</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLName</key>
+            <string>ca.stmaryslandscaping.app</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>sml</string>
+            </array>
+        </dict>
+    </array>
+    <key>NSFaceIDUsageDescription</key>
+    <string>Face ID is used to sign in to your St. Marys Landscaping account inside the app.</string>
 </dict>
 </plist>

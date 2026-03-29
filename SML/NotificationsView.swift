@@ -1,15 +1,14 @@
 //
 //  NotificationsView.swift
-//  sml
+//  SMC
 //
 //  Version: 1.0.0
 //  Author: Nuvren.com
 //
 //  Назначение:
-//  - Экран управления push уведомлениями для клиента
+//  - Экран управления push уведомлениями
 //  - Статус, включение, переход в системные настройки iOS
 //
-
 
 import SwiftUI
 import UserNotifications
@@ -19,9 +18,7 @@ import UIKit
 struct NotificationsView: View {
 
     @State private var permissionStatus: String = "Checking..."
-    @State private var isWorking = false
-
-    private let brandColor = AppConfig.brandColorSwiftUI
+    @State private var isWorking: Bool = false
 
     var body: some View {
         List {
@@ -31,9 +28,8 @@ struct NotificationsView: View {
                         .foregroundStyle(statusColor())
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Push Notifications")
+                        Text("Push notifications")
                             .font(.headline)
-                            .foregroundStyle(brandColor)
                         Text(permissionStatus)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -42,30 +38,30 @@ struct NotificationsView: View {
             }
 
             Section("Actions") {
-                Button(isWorking ? "Working..." : "Enable Notifications") {
+                Button(isWorking ? "Working..." : "Enable notifications") {
                     Task { await requestNotifications() }
                 }
                 .disabled(isWorking || permissionStatus == "Enabled" || permissionStatus == "Provisional")
 
-                Button("Open iPhone Notification Settings") {
+                Button("Open iPhone notification settings") {
                     openSystemSettings()
                 }
             }
 
             Section {
-                Text("Email notifications from the website continue to work even if push notifications are turned off.")
+                Text("Website email notifications continue to work even if push notifications are turned off.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
-        .tint(brandColor)
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refreshStatus() }
     }
 
     private func refreshStatus() async {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
 
         switch settings.authorizationStatus {
         case .authorized:
@@ -73,7 +69,7 @@ struct NotificationsView: View {
         case .denied:
             permissionStatus = "Disabled"
         case .notDetermined:
-            permissionStatus = "Not Requested"
+            permissionStatus = "Not requested"
         case .provisional:
             permissionStatus = "Provisional"
         case .ephemeral:
@@ -95,26 +91,32 @@ struct NotificationsView: View {
     }
 
     private func statusColor() -> Color {
-        if permissionStatus == "Disabled" {
+        switch permissionStatus {
+        case "Enabled", "Provisional":
+            return .green
+        case "Disabled":
             return .red
+        default:
+            return .secondary
         }
-        return brandColor
     }
 
     private func requestNotifications() async {
         isWorking = true
         defer { isWorking = false }
 
+        let center = UNUserNotificationCenter.current()
+
         do {
-            _ = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            _ = try await center.requestAuthorization(options: [.alert, .sound, .badge])
         } catch {}
 
         await refreshStatus()
 
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        let settings = await center.notificationSettings()
         if settings.authorizationStatus == .authorized ||
-           settings.authorizationStatus == .provisional ||
-           settings.authorizationStatus == .ephemeral {
+            settings.authorizationStatus == .provisional ||
+            settings.authorizationStatus == .ephemeral {
             UIApplication.shared.registerForRemoteNotifications()
         }
     }
