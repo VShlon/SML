@@ -183,7 +183,7 @@ struct ContentView: View {
                 .init(tab: .left1, systemImage: "house", isCenter: false,
                       url: "https://stmaryslandscaping.ca/", token: left1Token, command: left1Command),
                 .init(tab: .left2, systemImage: "calendar", isCenter: false,
-                      url: "https://stmaryslandscaping.ca/ccount-workda/", token: left2Token, command: left2Command),
+                      url: "https://stmaryslandscaping.ca/account-workday/", token: left2Token, command: left2Command),
                 .init(tab: .center, systemImage: "checklist", isCenter: true,
                       url: "https://stmaryslandscaping.ca/tasks-today/", token: centerToken, command: centerCommand),
                 .init(tab: .right1, systemImage: "exclamationmark.bubble", isCenter: false,
@@ -197,7 +197,7 @@ struct ContentView: View {
                 .init(tab: .left2, systemImage: "calendar.badge.clock", isCenter: false,
                       url: "https://stmaryslandscaping.ca/monthly-billing/", token: left2Token, command: left2Command),
                 .init(tab: .center, systemImage: "briefcase", isCenter: true,
-                      url: "https://stmaryslandscaping.ca/ccount-workda/", token: centerToken, command: centerCommand),
+                      url: "https://stmaryslandscaping.ca/account-workday/", token: centerToken, command: centerCommand),
                 .init(tab: .right1, systemImage: "dollarsign.square", isCenter: false,
                       url: "https://stmaryslandscaping.ca/payroll-review/", token: right1Token, command: right1Command),
             ]
@@ -373,14 +373,14 @@ struct ContentView: View {
             else { target = .left1 }
 
         case .worker:
-            if path.contains("/ccount-workda") { target = .left2 }
+            if path.contains("/account-workday") { target = .left2 }
             else if path.contains("/tasks-today") { target = .center }
             else if path.contains("/report") { target = .right1 }
             else { target = .left1 }
 
         case .accountant:
             if path.contains("/monthly-billing") { target = .left2 }
-            else if path.contains("/ccount-workda") { target = .center }
+            else if path.contains("/account-workday") { target = .center }
             else if path.contains("/payroll-review") { target = .right1 }
             else { target = .left1 }
 
