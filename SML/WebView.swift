@@ -17,7 +17,6 @@
 import SwiftUI
 import WebKit
 import UIKit
-import Security
 
 struct WebNavigationCommand: Equatable {
     let id: UUID
@@ -683,13 +682,11 @@ extension WebView {
 #if targetEnvironment(simulator)
             return "sandbox"
 #else
-            guard let task = SecTaskCreateFromSelf(nil) else {
-                return "sandbox"
-            }
-
-            let value = SecTaskCopyValueForEntitlement(task, "aps-environment" as CFString, nil)
-            let raw = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-            return raw == "production" ? "production" : "sandbox"
+#if DEBUG
+            return "sandbox"
+#else
+            return "production"
+#endif
 #endif
         }
 
