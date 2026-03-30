@@ -32,10 +32,14 @@ struct WebView: UIViewControllerRepresentable {
     let hasBiometricLogin: Bool
     let command: WebNavigationCommand?
 
+    // Назначение:
+    // - Создает coordinator для WKWebView bridge
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
+    // Назначение:
+    // - Создает host controller и передает в него начальные данные
     func makeUIViewController(context: Context) -> WebViewController {
         let vc = WebViewController()
         vc.coordinator = context.coordinator
@@ -55,6 +59,8 @@ struct WebView: UIViewControllerRepresentable {
         return vc
     }
 
+    // Назначение:
+    // - Обновляет текущее состояние bridge и применяет входящие команды навигации
     func updateUIViewController(_ vc: WebViewController, context: Context) {
         context.coordinator.setCurrent(
             apnsToken: apnsToken,
@@ -83,6 +89,8 @@ final class WebViewController: UIViewController {
 
     private var didLoadInitial = false
 
+    // Назначение:
+    // - Создает WKWebView и настраивает его делегаты
     override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -134,11 +142,15 @@ final class WebViewController: UIViewController {
         loadInitialIfNeeded()
     }
 
+    // Назначение:
+    // - Повторно проверяет первичную загрузку после появления экрана
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         loadInitialIfNeeded()
     }
 
+    // Назначение:
+    // - Гарантированно загружает стартовую страницу только один раз
     private func loadInitialIfNeeded() {
         guard let wv = webView, let coordinator else { return }
         guard !didLoadInitial else { return }
@@ -172,6 +184,12 @@ extension WebView {
         private var lastInjectedToken: String = ""
         private var lastInjectedDeviceId: String = ""
         private var lastInjectedURL: String = ""
+        private var lastInjectedBundleId: String = ""
+        private var lastInjectedAppVersion: String = ""
+        private var lastInjectedBuildNumber: String = ""
+        private var lastInjectedPushEnvironment: String = ""
+        private var lastInjectedBiometricEnabled: Bool = false
+        private var lastInjectedHasBiometricLogin: Bool = false
 
         private var pendingCommand: WebNavigationCommand? = nil
         private var lastHandledCommandId: UUID? = nil
@@ -200,6 +218,8 @@ extension WebView {
 
         private let cookieWorkQueue = DispatchQueue.global(qos: .utility)
 
+        // Назначение:
+        // - Сохраняет текущее состояние app для последующей JS-инъекции
         func setCurrent(apnsToken: String, deviceId: String, biometricEnabled: Bool, hasBiometricLogin: Bool) {
             currentToken = apnsToken.trimmingCharacters(in: .whitespacesAndNewlines)
             currentDeviceId = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -207,14 +227,20 @@ extension WebView {
             currentHasBiometricLogin = hasBiometricLogin
         }
 
+        // Назначение:
+        // - Принимает внешнюю команду навигации
         func setCommand(_ command: WebNavigationCommand?) {
             pendingCommand = command
         }
 
+        // Назначение:
+        // - Помечает команду как уже обработанную
         func markCommandHandled(_ id: UUID) {
             lastHandledCommandId = id
         }
 
+        // Назначение:
+        // - Обрабатывает сообщения от JS bridge
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             if message.name == "smlWhoami" {
                 if let dict = message.body as? [String: Any] {
@@ -267,11 +293,14 @@ extension WebView {
                 DispatchQueue.main.async {
                     PushState.shared.refreshBiometricState()
                 }
+
             default:
                 break
             }
         }
 
+        // Назначение:
+        // - Проверяет, относится ли внешний домен к списку разрешенных исключений
         private func isAllowedExternalHost(_ host: String) -> Bool {
             if allowedExternalHosts.contains(host) {
                 return true
@@ -286,6 +315,8 @@ extension WebView {
             return false
         }
 
+        // Назначение:
+        // - Определяет, является ли URL внешним относительно основного домена SML
         func isExternalURL(_ url: URL) -> Bool {
             let scheme = (url.scheme ?? "").lowercased()
             if scheme != "http" && scheme != "https" {
@@ -308,6 +339,8 @@ extension WebView {
             return true
         }
 
+        // Назначение:
+        // - Применяет отложенную команду перехода в webView
         func applyCommandIfNeeded(webView: WKWebView) {
             guard let cmd = pendingCommand else { return }
             if lastHandledCommandId == cmd.id { return }
@@ -327,6 +360,8 @@ extension WebView {
             webView.load(URLRequest(url: cmd.url))
         }
 
+        // Назначение:
+        // - Решает, разрешать ли навигацию внутри WKWebView
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
@@ -370,6 +405,8 @@ extension WebView {
             decisionHandler(.allow)
         }
 
+        // Назначение:
+        // - Перехватывает попытки открыть новое окно и открывает его в текущем webView
         func webView(
             _ webView: WKWebView,
             createWebViewWith configuration: WKWebViewConfiguration,
@@ -396,6 +433,8 @@ extension WebView {
             return nil
         }
 
+        // Назначение:
+        // - Логирует ошибки обычной навигации
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             let ns = error as NSError
             if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
@@ -404,6 +443,8 @@ extension WebView {
             print("WEBVIEW didFail:", error.localizedDescription)
         }
 
+        // Назначение:
+        // - Логирует ошибки предварительной навигации
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             let ns = error as NSError
             if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
@@ -412,11 +453,15 @@ extension WebView {
             print("WEBVIEW didFailProvisionalNavigation:", error.localizedDescription)
         }
 
+        // Назначение:
+        // - Перезапускает webView после падения web content process
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             print("WEBVIEW process terminated; reloading current page")
             webView.reload()
         }
 
+        // Назначение:
+        // - После завершения загрузки синхронизирует bridge, cookies и whoami
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             didFinishOnce = true
 
@@ -431,6 +476,8 @@ extension WebView {
             }
         }
 
+        // Назначение:
+        // - Запрашивает whoami через JS внутри авторизованной страницы
         private func requestWhoamiViaWebView(webView: WKWebView) {
             let now = Date().timeIntervalSince1970
             if now - lastWhoamiAt < whoamiMinInterval {
@@ -505,6 +552,8 @@ extension WebView {
             webView.evaluateJavaScript(script, completionHandler: nil)
         }
 
+        // Назначение:
+        // - Копирует cookies из WKWebView в shared storage для URLSession fallback
         private func syncCookiesToSharedStorage(webView: WKWebView) {
             let now = Date().timeIntervalSince1970
             if now - lastCookieSyncAt < cookieSyncMinInterval {
@@ -541,29 +590,43 @@ extension WebView {
             }
         }
 
+        // Назначение:
+        // - Инжектит app bridge в страницу и передает в web корректный APNs environment
         func tryInjectIntoPage(webView: WKWebView, force: Bool) {
             let token = currentToken
             let did = currentDeviceId
             let device = did.isEmpty ? "ios-device" : did
+
             let biometricEnabled = currentBiometricEnabled
             let hasBiometricLogin = currentHasBiometricLogin
+
             let bundleId = Bundle.main.bundleIdentifier ?? ""
             let appVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
             let buildNumber = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? ""
+
             let registrationContext = currentPushRegistrationContext()
             let pushEnvironment = registrationContext.environment
             let distributionChannel = registrationContext.distribution
-            let signedEnvironment = registrationContext.signedEnvironment
+            let signedEnvironment = registrationContext.signedEnvironment.isEmpty ? pushEnvironment : registrationContext.signedEnvironment
             let provisioningEnvironment = registrationContext.provisioningEnvironment
             let receiptEnvironment = registrationContext.receiptEnvironment
             let isTestFlight = registrationContext.isTestFlight
             let isDebugBuild = registrationContext.isDebugBuild
             let isReleaseBuild = registrationContext.isReleaseBuild
+            let usesProductionPush = (pushEnvironment == "production")
 
             let page = webView.url?.absoluteString ?? ""
 
             if !force {
-                if token == lastInjectedToken && device == lastInjectedDeviceId && page == lastInjectedURL {
+                if token == lastInjectedToken &&
+                    device == lastInjectedDeviceId &&
+                    page == lastInjectedURL &&
+                    bundleId == lastInjectedBundleId &&
+                    appVersion == lastInjectedAppVersion &&
+                    buildNumber == lastInjectedBuildNumber &&
+                    pushEnvironment == lastInjectedPushEnvironment &&
+                    biometricEnabled == lastInjectedBiometricEnabled &&
+                    hasBiometricLogin == lastInjectedHasBiometricLogin {
                     return
                 }
             }
@@ -571,6 +634,12 @@ extension WebView {
             lastInjectedToken = token
             lastInjectedDeviceId = device
             lastInjectedURL = page
+            lastInjectedBundleId = bundleId
+            lastInjectedAppVersion = appVersion
+            lastInjectedBuildNumber = buildNumber
+            lastInjectedPushEnvironment = pushEnvironment
+            lastInjectedBiometricEnabled = biometricEnabled
+            lastInjectedHasBiometricLogin = hasBiometricLogin
 
             let tokenJS = jsString(token)
             let deviceJS = jsString(device)
@@ -582,11 +651,17 @@ extension WebView {
             let signedEnvironmentJS = jsString(signedEnvironment)
             let provisioningEnvironmentJS = jsString(provisioningEnvironment)
             let receiptEnvironmentJS = jsString(receiptEnvironment)
+
             let isTestFlightJS = isTestFlight ? "true" : "false"
             let isDebugBuildJS = isDebugBuild ? "true" : "false"
             let isReleaseBuildJS = isReleaseBuild ? "true" : "false"
+            let isProductionPushJS = usesProductionPush ? "true" : "false"
+            let isSandboxPushJS = usesProductionPush ? "false" : "true"
             let biometricEnabledJS = biometricEnabled ? "true" : "false"
             let hasBiometricLoginJS = hasBiometricLogin ? "true" : "false"
+
+            let shouldRegister = !token.isEmpty && !device.isEmpty && !bundleId.isEmpty
+            let shouldRegisterJS = shouldRegister ? "true" : "false"
 
             let css = """
             input, textarea, [contenteditable="true"] { caret-color: #438239 !important; }
@@ -602,6 +677,7 @@ extension WebView {
               window.SML_APP.appVersion = \(appVersionJS);
               window.SML_APP.buildNumber = \(buildNumberJS);
               window.SML_APP.pushEnvironment = \(pushEnvironmentJS);
+              window.SML_APP.apnsEnvironment = \(pushEnvironmentJS);
               window.SML_APP.distribution = \(distributionChannelJS);
               window.SML_APP.releaseChannel = \(distributionChannelJS);
               window.SML_APP.signedEnvironment = \(signedEnvironmentJS);
@@ -610,7 +686,10 @@ extension WebView {
               window.SML_APP.isTestFlight = \(isTestFlightJS);
               window.SML_APP.isDebugBuild = \(isDebugBuildJS);
               window.SML_APP.isReleaseBuild = \(isReleaseBuildJS);
-              window.SML_APP.isProductionBuild = \(isReleaseBuildJS);
+              window.SML_APP.isProductionBuild = \(isProductionPushJS);
+              window.SML_APP.isSandboxBuild = \(isSandboxPushJS);
+              window.SML_APP.isProductionPush = \(isProductionPushJS);
+              window.SML_APP.isSandboxPush = \(isSandboxPushJS);
               window.SML_APP.isApp = true;
               window.SML_APP.platform = "ios";
               window.SML_APP.biometricEnabled = \(biometricEnabledJS);
@@ -626,6 +705,7 @@ extension WebView {
               try {
                 document.documentElement.setAttribute("data-sml-app", "1");
                 document.documentElement.setAttribute("data-sml-platform", "ios");
+                document.documentElement.setAttribute("data-sml-push-environment", \(pushEnvironmentJS));
               } catch (e) {}
 
               try {
@@ -638,13 +718,18 @@ extension WebView {
                     appVersion: window.SML_APP.appVersion,
                     buildNumber: window.SML_APP.buildNumber,
                     pushEnvironment: window.SML_APP.pushEnvironment,
+                    apnsEnvironment: window.SML_APP.apnsEnvironment,
                     distribution: window.SML_APP.distribution,
                     signedEnvironment: window.SML_APP.signedEnvironment,
                     provisioningEnvironment: window.SML_APP.provisioningEnvironment,
                     receiptEnvironment: window.SML_APP.receiptEnvironment,
                     isTestFlight: window.SML_APP.isTestFlight,
                     isDebugBuild: window.SML_APP.isDebugBuild,
-                    isReleaseBuild: window.SML_APP.isReleaseBuild
+                    isReleaseBuild: window.SML_APP.isReleaseBuild,
+                    isProductionBuild: window.SML_APP.isProductionBuild,
+                    isSandboxBuild: window.SML_APP.isSandboxBuild,
+                    isProductionPush: window.SML_APP.isProductionPush,
+                    isSandboxPush: window.SML_APP.isSandboxPush
                   }
                 }));
               } catch (e) {}
@@ -661,13 +746,18 @@ extension WebView {
                         appVersion: window.SML_APP.appVersion,
                         buildNumber: window.SML_APP.buildNumber,
                         pushEnvironment: window.SML_APP.pushEnvironment,
+                        apnsEnvironment: window.SML_APP.apnsEnvironment,
                         distribution: window.SML_APP.distribution,
                         signedEnvironment: window.SML_APP.signedEnvironment,
                         provisioningEnvironment: window.SML_APP.provisioningEnvironment,
                         receiptEnvironment: window.SML_APP.receiptEnvironment,
                         isTestFlight: window.SML_APP.isTestFlight,
                         isDebugBuild: window.SML_APP.isDebugBuild,
-                        isReleaseBuild: window.SML_APP.isReleaseBuild
+                        isReleaseBuild: window.SML_APP.isReleaseBuild,
+                        isProductionBuild: window.SML_APP.isProductionBuild,
+                        isSandboxBuild: window.SML_APP.isSandboxBuild,
+                        isProductionPush: window.SML_APP.isProductionPush,
+                        isSandboxPush: window.SML_APP.isSandboxPush
                       }
                     }));
                   } catch (e2) {}
@@ -680,10 +770,13 @@ extension WebView {
               window.SML_PUSH_APP_VERSION = \(appVersionJS);
               window.SML_PUSH_BUILD_NUMBER = \(buildNumberJS);
               window.SML_PUSH_ENVIRONMENT = \(pushEnvironmentJS);
+              window.SML_PUSH_APNS_ENVIRONMENT = \(pushEnvironmentJS);
               window.SML_PUSH_DISTRIBUTION = \(distributionChannelJS);
               window.SML_PUSH_SIGNED_ENVIRONMENT = \(signedEnvironmentJS);
               window.SML_PUSH_PROVISIONING_ENVIRONMENT = \(provisioningEnvironmentJS);
               window.SML_PUSH_RECEIPT_ENVIRONMENT = \(receiptEnvironmentJS);
+              window.SML_PUSH_IS_PRODUCTION = \(isProductionPushJS);
+              window.SML_PUSH_IS_SANDBOX = \(isSandboxPushJS);
 
               try {
                 if (!document.getElementById("sml-ios-style")) {
@@ -738,7 +831,7 @@ extension WebView {
                 }
               } catch (e) {}
 
-              if (window.SML_PUSH_REGISTER) {
+              if (window.SML_PUSH_REGISTER && \(shouldRegisterJS)) {
                 try { window.SML_PUSH_REGISTER(); } catch (e) {}
               }
             })();
@@ -747,7 +840,18 @@ extension WebView {
             webView.evaluateJavaScript(js, completionHandler: nil)
         }
 
-        private func currentPushRegistrationContext() -> (environment: String, distribution: String, signedEnvironment: String, provisioningEnvironment: String, receiptEnvironment: String, isTestFlight: Bool, isDebugBuild: Bool, isReleaseBuild: Bool) {
+        // Назначение:
+        // - Возвращает итоговый контекст регистрации push для JS bridge
+        private func currentPushRegistrationContext() -> (
+            environment: String,
+            distribution: String,
+            signedEnvironment: String,
+            provisioningEnvironment: String,
+            receiptEnvironment: String,
+            isTestFlight: Bool,
+            isDebugBuild: Bool,
+            isReleaseBuild: Bool
+        ) {
 #if targetEnvironment(simulator)
             return (
                 environment: "sandbox",
@@ -762,54 +866,41 @@ extension WebView {
 #else
             let provisioningEnvironment = embeddedPushEnvironment() ?? ""
             let receiptEnvironment = receiptPushEnvironment()
-
-#if DEBUG
-            let signedEnvironment: String
-            if provisioningEnvironment == "production" || provisioningEnvironment == "sandbox" {
-                signedEnvironment = provisioningEnvironment
-            } else {
-                signedEnvironment = "sandbox"
-            }
-
-            return (
-                environment: "sandbox",
-                distribution: "xcode",
-                signedEnvironment: signedEnvironment,
-                provisioningEnvironment: provisioningEnvironment,
-                receiptEnvironment: receiptEnvironment,
-                isTestFlight: false,
-                isDebugBuild: true,
-                isReleaseBuild: false
-            )
-#else
             let hasEmbeddedProfile = hasEmbeddedProvisioningProfile()
             let isTestFlight = receiptEnvironment == "sandbox" && !hasEmbeddedProfile
 
-            let resolvedEnvironment: String
-            let distribution: String
-            let signedEnvironment: String
+            let resolvedEnvironment = resolvedPushEnvironment(
+                provisioningEnvironment: provisioningEnvironment,
+                receiptEnvironment: receiptEnvironment,
+                hasEmbeddedProfile: hasEmbeddedProfile
+            )
 
-            if provisioningEnvironment == "production" {
-                resolvedEnvironment = "production"
-                distribution = "adhoc"
-                signedEnvironment = "production"
-            } else if provisioningEnvironment == "sandbox" {
-                resolvedEnvironment = "sandbox"
-                distribution = "development"
-                signedEnvironment = "sandbox"
-            } else if isTestFlight {
-                resolvedEnvironment = "production"
+            let signedEnvironment = provisioningEnvironment.isEmpty ? resolvedEnvironment : provisioningEnvironment
+
+            let distribution: String
+            if isTestFlight {
                 distribution = "testflight"
-                signedEnvironment = "production"
+            } else if provisioningEnvironment == "sandbox" {
+                distribution = "development"
+            } else if provisioningEnvironment == "production" {
+                distribution = "adhoc"
             } else if receiptEnvironment == "production" {
-                resolvedEnvironment = "production"
                 distribution = "appstore"
-                signedEnvironment = "production"
             } else {
-                resolvedEnvironment = "production"
+#if DEBUG
+                distribution = "xcode"
+#else
                 distribution = "unknown"
-                signedEnvironment = ""
+#endif
             }
+
+#if DEBUG
+            let isDebugBuild = true
+            let isReleaseBuild = false
+#else
+            let isDebugBuild = false
+            let isReleaseBuild = true
+#endif
 
             return (
                 environment: resolvedEnvironment,
@@ -818,13 +909,44 @@ extension WebView {
                 provisioningEnvironment: provisioningEnvironment,
                 receiptEnvironment: receiptEnvironment,
                 isTestFlight: isTestFlight,
-                isDebugBuild: false,
-                isReleaseBuild: true
+                isDebugBuild: isDebugBuild,
+                isReleaseBuild: isReleaseBuild
             )
-#endif
 #endif
         }
 
+        // Назначение:
+        // - Нормализует итоговый APNs environment для текущей сборки
+        private func resolvedPushEnvironment(
+            provisioningEnvironment: String,
+            receiptEnvironment: String,
+            hasEmbeddedProfile: Bool
+        ) -> String {
+            if provisioningEnvironment == "production" {
+                return "production"
+            }
+
+            if provisioningEnvironment == "sandbox" {
+                return "sandbox"
+            }
+
+            if receiptEnvironment == "production" {
+                return "production"
+            }
+
+            if receiptEnvironment == "sandbox" && !hasEmbeddedProfile {
+                return "production"
+            }
+
+#if DEBUG
+            return "sandbox"
+#else
+            return "production"
+#endif
+        }
+
+        // Назначение:
+        // - Определяет окружение receipt
         private func receiptPushEnvironment() -> String {
             guard let receiptURL = Bundle.main.appStoreReceiptURL else {
                 return ""
@@ -842,10 +964,14 @@ extension WebView {
             return ""
         }
 
+        // Назначение:
+        // - Проверяет наличие embedded provisioning profile
         private func hasEmbeddedProvisioningProfile() -> Bool {
             Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") != nil
         }
 
+        // Назначение:
+        // - Читает aps-environment из embedded provisioning profile
         private func embeddedPushEnvironment() -> String? {
             guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") else {
                 return nil
@@ -886,6 +1012,8 @@ extension WebView {
             return nil
         }
 
+        // Назначение:
+        // - После успешной авторизации решает, сохранять ли логин для Face ID
         private func maybePersistPendingLoginAfterSuccessfulNavigation(webView: WKWebView) {
             guard let pendingCredentialSave else { return }
 
@@ -914,6 +1042,8 @@ extension WebView {
             promptToEnableBiometricLogin(using: pendingCredentialSave)
         }
 
+        // Назначение:
+        // - Показывает alert с предложением включить Face ID логин
         private func promptToEnableBiometricLogin(using login: SMCStoredLogin) {
             guard let host = hostViewController else { return }
             guard host.presentedViewController == nil else { return }
@@ -945,6 +1075,8 @@ extension WebView {
             }
         }
 
+        // Назначение:
+        // - Запускает Face ID авторизацию и автологин на web-странице
         private func promptForBiometricLoginIfNeeded(webView: WKWebView) {
             guard currentBiometricEnabled else { return }
             guard let login = SMCKeychain.readLogin() else { return }
@@ -955,6 +1087,8 @@ extension WebView {
             }
         }
 
+        // Назначение:
+        // - Подставляет сохраненные креды в форму логина и отправляет ее
         private func fillAndSubmitLogin(webView: WKWebView, login: SMCStoredLogin) {
             let userJS = jsString(login.username)
             let passJS = jsString(login.password)
@@ -995,12 +1129,16 @@ extension WebView {
             webView.evaluateJavaScript(js, completionHandler: nil)
         }
 
+        // Назначение:
+        // - Открывает внешний URL через UIApplication
         private func openExternally(_ url: URL) {
             DispatchQueue.main.async {
                 UIApplication.shared.open(url, options: [:], completionHandler: nil)
             }
         }
 
+        // Назначение:
+        // - Сравнивает URL без учета fragment
         private func urlsEffectivelyEqual(_ lhs: URL, _ rhs: URL) -> Bool {
             var l = URLComponents(url: lhs, resolvingAgainstBaseURL: false)
             var r = URLComponents(url: rhs, resolvingAgainstBaseURL: false)
@@ -1009,6 +1147,8 @@ extension WebView {
             return l?.string == r?.string
         }
 
+        // Назначение:
+        // - Экранирует Swift string для безопасной вставки в JS
         private func jsString(_ value: String) -> String {
             guard
                 let data = try? JSONSerialization.data(withJSONObject: [value], options: []),
