@@ -17,7 +17,6 @@
 import SwiftUI
 import WebKit
 import UIKit
-import Security
 
 struct WebNavigationCommand: Equatable {
     let id: UUID
@@ -429,7 +428,6 @@ extension WebView {
                 self.tryInjectIntoPage(webView: webView, force: true)
                 self.syncCookiesToSharedStorage(webView: webView)
                 self.requestWhoamiViaWebView(webView: webView)
-                self.injectBiometricUIIfNeeded(webView: webView)
                 self.maybePersistPendingLoginAfterSuccessfulNavigation(webView: webView)
             }
         }
@@ -768,10 +766,9 @@ extension WebView {
                 isReleaseBuild: false
             )
 #else
-            let signedEnvironment = signedPushEnvironment()
             let provisioningEnvironment = embeddedPushEnvironment() ?? ""
             let isTestFlight = isTestFlightBuild()
-            let receiptEnvironment = isTestFlight ? "production" : ""
+            let receiptEnvironment = receiptPushEnvironment(isTestFlight: isTestFlight)
 #if DEBUG
             let isDebugBuild = true
 #else
@@ -786,29 +783,29 @@ extension WebView {
                 distribution = "xcode"
             } else if provisioningEnvironment == "production" {
                 distribution = "adhoc"
-            } else if isReleaseBuild {
+            } else if receiptEnvironment == "production" {
                 distribution = "appstore"
             } else {
-                distribution = "unknown"
+                distribution = isDebugBuild ? "xcode" : "unknown"
             }
 
-            let environment: String
-            if signedEnvironment == "production" || signedEnvironment == "sandbox" {
-                environment = signedEnvironment
-            } else if isTestFlight {
-                environment = "production"
+            let resolvedEnvironment: String
+            if isTestFlight {
+                resolvedEnvironment = "production"
             } else if provisioningEnvironment == "production" || provisioningEnvironment == "sandbox" {
-                environment = provisioningEnvironment
+                resolvedEnvironment = provisioningEnvironment
+            } else if receiptEnvironment == "production" {
+                resolvedEnvironment = "production"
             } else if isDebugBuild {
-                environment = "sandbox"
+                resolvedEnvironment = "sandbox"
             } else {
-                environment = "production"
+                resolvedEnvironment = "production"
             }
 
             return (
-                environment: environment,
+                environment: resolvedEnvironment,
                 distribution: distribution,
-                signedEnvironment: signedEnvironment,
+                signedEnvironment: resolvedEnvironment,
                 provisioningEnvironment: provisioningEnvironment,
                 receiptEnvironment: receiptEnvironment,
                 isTestFlight: isTestFlight,
@@ -818,22 +815,24 @@ extension WebView {
 #endif
         }
 
-        private func signedPushEnvironment() -> String {
-            guard let task = SecTaskCreateFromSelf(nil) else {
-                return ""
-            }
-
-            guard let value = SecTaskCopyValueForEntitlement(task, "aps-environment" as CFString, nil) else {
-                return ""
-            }
-
-            let raw = (value as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if raw == "production" {
+        private func receiptPushEnvironment(isTestFlight: Bool) -> String {
+            if isTestFlight {
                 return "production"
             }
-            if raw == "development" || raw == "sandbox" {
-                return "sandbox"
+
+            guard let receiptURL = Bundle.main.appStoreReceiptURL else {
+                return ""
             }
+
+            let lastPath = receiptURL.lastPathComponent.lowercased()
+            if lastPath == "sandboxreceipt" {
+                return "production"
+            }
+
+            if FileManager.default.fileExists(atPath: receiptURL.path) {
+                return "production"
+            }
+
             return ""
         }
 
@@ -882,10 +881,6 @@ extension WebView {
                 return "sandbox"
             }
             return nil
-        }
-
-        private func injectBiometricUIIfNeeded(webView: WKWebView) {
-            tryInjectIntoPage(webView: webView, force: true)
         }
 
         private func maybePersistPendingLoginAfterSuccessfulNavigation(webView: WKWebView) {
