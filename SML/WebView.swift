@@ -83,7 +83,6 @@ final class WebViewController: UIViewController {
 
     private var didLoadInitial = false
 
-
     override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -687,10 +686,10 @@ extension WebView {
               window.SML_PUSH_RECEIPT_ENVIRONMENT = \(receiptEnvironmentJS);
 
               try {
-                if (!document.getElementById('sml-ios-style')) {
-                  var st = document.createElement('style');
-                  st.id = 'sml-ios-style';
-                  st.type = 'text/css';
+                if (!document.getElementById("sml-ios-style")) {
+                  var st = document.createElement("style");
+                  st.id = "sml-ios-style";
+                  st.type = "text/css";
                   st.appendChild(document.createTextNode(\(cssJS)));
                   document.head.appendChild(st);
                 }
@@ -702,37 +701,37 @@ extension WebView {
 
                   var captureAndSend = function (form) {
                     try {
-                      form = form || document.querySelector('form');
+                      form = form || document.querySelector("form");
                       if (!form) return;
 
                       var user = form.querySelector('input[name="log"], input[name="username"], input[type="email"], input[type="text"]');
                       var pass = form.querySelector('input[name="pwd"], input[name="password"], input[type="password"]');
                       if (!user || !pass) return;
 
-                      var username = (user.value || '').trim();
-                      var password = pass.value || '';
+                      var username = (user.value || "").trim();
+                      var password = pass.value || "";
                       if (!username || !password) return;
 
                       window.webkit.messageHandlers.smlBiometric.postMessage({
-                        action: 'captureLogin',
+                        action: "captureLogin",
                         username: username,
                         password: password
                       });
                     } catch (e) {}
                   };
 
-                  document.addEventListener('submit', function (ev) {
+                  document.addEventListener("submit", function (ev) {
                     captureAndSend(ev.target);
                   }, true);
 
-                  document.addEventListener('click', function (ev) {
+                  document.addEventListener("click", function (ev) {
                     try {
                       var target = ev.target && ev.target.closest
-                        ? ev.target.closest('button[type="submit"], input[type="submit"], .woocommerce-form-login__submit, .button, .btn')
+                        ? ev.target.closest("button[type='submit'], input[type='submit'], .woocommerce-form-login__submit, .button, .btn")
                         : null;
                       if (!target) return;
 
-                      var form = target.form || target.closest('form');
+                      var form = target.form || target.closest("form");
                       captureAndSend(form);
                     } catch (e) {}
                   }, true);
@@ -748,11 +747,6 @@ extension WebView {
             webView.evaluateJavaScript(js, completionHandler: nil)
         }
 
-        private func currentPushEnvironment() -> String {
-            let context = currentPushRegistrationContext()
-            return context.environment
-        }
-
         private func currentPushRegistrationContext() -> (environment: String, distribution: String, signedEnvironment: String, provisioningEnvironment: String, receiptEnvironment: String, isTestFlight: Bool, isDebugBuild: Bool, isReleaseBuild: Bool) {
 #if targetEnvironment(simulator)
             return (
@@ -760,73 +754,85 @@ extension WebView {
                 distribution: "simulator",
                 signedEnvironment: "sandbox",
                 provisioningEnvironment: "",
-                receiptEnvironment: "",
+                receiptEnvironment: "sandbox",
                 isTestFlight: false,
                 isDebugBuild: true,
                 isReleaseBuild: false
             )
 #else
             let provisioningEnvironment = embeddedPushEnvironment() ?? ""
-            let isTestFlight = isTestFlightBuild()
-            let receiptEnvironment = receiptPushEnvironment(isTestFlight: isTestFlight)
-#if DEBUG
-            let isDebugBuild = true
-#else
-            let isDebugBuild = false
-#endif
-            let isReleaseBuild = !isDebugBuild
+            let receiptEnvironment = receiptPushEnvironment()
 
-            let distribution: String
-            if isTestFlight {
-                distribution = "testflight"
-            } else if provisioningEnvironment == "sandbox" {
-                distribution = "xcode"
-            } else if provisioningEnvironment == "production" {
-                distribution = "adhoc"
-            } else if receiptEnvironment == "production" {
-                distribution = "appstore"
+#if DEBUG
+            let signedEnvironment: String
+            if provisioningEnvironment == "production" || provisioningEnvironment == "sandbox" {
+                signedEnvironment = provisioningEnvironment
             } else {
-                distribution = isDebugBuild ? "xcode" : "unknown"
+                signedEnvironment = "sandbox"
             }
 
+            return (
+                environment: "sandbox",
+                distribution: "xcode",
+                signedEnvironment: signedEnvironment,
+                provisioningEnvironment: provisioningEnvironment,
+                receiptEnvironment: receiptEnvironment,
+                isTestFlight: false,
+                isDebugBuild: true,
+                isReleaseBuild: false
+            )
+#else
+            let hasEmbeddedProfile = hasEmbeddedProvisioningProfile()
+            let isTestFlight = receiptEnvironment == "sandbox" && !hasEmbeddedProfile
+
             let resolvedEnvironment: String
-            if isTestFlight {
+            let distribution: String
+            let signedEnvironment: String
+
+            if provisioningEnvironment == "production" {
                 resolvedEnvironment = "production"
-            } else if provisioningEnvironment == "production" || provisioningEnvironment == "sandbox" {
-                resolvedEnvironment = provisioningEnvironment
+                distribution = "adhoc"
+                signedEnvironment = "production"
+            } else if provisioningEnvironment == "sandbox" {
+                resolvedEnvironment = "sandbox"
+                distribution = "development"
+                signedEnvironment = "sandbox"
+            } else if isTestFlight {
+                resolvedEnvironment = "production"
+                distribution = "testflight"
+                signedEnvironment = "production"
             } else if receiptEnvironment == "production" {
                 resolvedEnvironment = "production"
-            } else if isDebugBuild {
-                resolvedEnvironment = "sandbox"
+                distribution = "appstore"
+                signedEnvironment = "production"
             } else {
                 resolvedEnvironment = "production"
+                distribution = "unknown"
+                signedEnvironment = ""
             }
 
             return (
                 environment: resolvedEnvironment,
                 distribution: distribution,
-                signedEnvironment: resolvedEnvironment,
+                signedEnvironment: signedEnvironment,
                 provisioningEnvironment: provisioningEnvironment,
                 receiptEnvironment: receiptEnvironment,
                 isTestFlight: isTestFlight,
-                isDebugBuild: isDebugBuild,
-                isReleaseBuild: isReleaseBuild
+                isDebugBuild: false,
+                isReleaseBuild: true
             )
+#endif
 #endif
         }
 
-        private func receiptPushEnvironment(isTestFlight: Bool) -> String {
-            if isTestFlight {
-                return "production"
-            }
-
+        private func receiptPushEnvironment() -> String {
             guard let receiptURL = Bundle.main.appStoreReceiptURL else {
                 return ""
             }
 
             let lastPath = receiptURL.lastPathComponent.lowercased()
             if lastPath == "sandboxreceipt" {
-                return "production"
+                return "sandbox"
             }
 
             if FileManager.default.fileExists(atPath: receiptURL.path) {
@@ -836,11 +842,8 @@ extension WebView {
             return ""
         }
 
-        private func isTestFlightBuild() -> Bool {
-            guard let receiptURL = Bundle.main.appStoreReceiptURL else {
-                return false
-            }
-            return receiptURL.lastPathComponent == "sandboxReceipt"
+        private func hasEmbeddedProvisioningProfile() -> Bool {
+            Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") != nil
         }
 
         private func embeddedPushEnvironment() -> String? {
@@ -959,21 +962,21 @@ extension WebView {
             let js = """
             (function () {
               try {
-                var form = document.querySelector('form');
+                var form = document.querySelector("form");
                 var user = document.querySelector('input[name="log"], input[name="username"], input[type="email"], input[type="text"]');
                 var pass = document.querySelector('input[name="pwd"], input[name="password"], input[type="password"]');
                 if (!user || !pass) return false;
                 user.focus();
                 user.value = \(userJS);
-                user.dispatchEvent(new Event('input', { bubbles: true }));
-                user.dispatchEvent(new Event('change', { bubbles: true }));
+                user.dispatchEvent(new Event("input", { bubbles: true }));
+                user.dispatchEvent(new Event("change", { bubbles: true }));
                 pass.focus();
                 pass.value = \(passJS);
-                pass.dispatchEvent(new Event('input', { bubbles: true }));
-                pass.dispatchEvent(new Event('change', { bubbles: true }));
+                pass.dispatchEvent(new Event("input", { bubbles: true }));
+                pass.dispatchEvent(new Event("change", { bubbles: true }));
                 if (!form) { form = user.form || pass.form; }
                 if (form) {
-                  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                  form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
                   form.submit();
                   return true;
                 }
