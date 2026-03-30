@@ -298,7 +298,7 @@ struct ContentView: View {
                     tab: .right1,
                     systemImage: "exclamationmark.bubble",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/report/",
+                    url: "https://stmaryslandscaping.ca/account-report/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -646,7 +646,7 @@ struct ContentView: View {
                 return .left2
             } else if path.contains("/tasks-today") {
                 return .center
-            } else if path.contains("/report") {
+            } else if path.contains("/account-report") {
                 return .right1
             } else {
                 return .left1
