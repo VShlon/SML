@@ -1,6 +1,6 @@
 //
 //  NotificationsView.swift
-//  SMC
+//  SML
 //
 //  Version: 1.0.0
 //  Author: Nuvren.com
@@ -30,6 +30,7 @@ struct NotificationsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Push notifications")
                             .font(.headline)
+
                         Text(permissionStatus)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -56,7 +57,9 @@ struct NotificationsView: View {
         }
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await refreshStatus() }
+        .task {
+            await refreshStatus()
+        }
     }
 
     private func refreshStatus() async {
@@ -109,7 +112,7 @@ struct NotificationsView: View {
 
         do {
             _ = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-        } catch {}
+        } catch { }
 
         await refreshStatus()
 
@@ -122,6 +125,13 @@ struct NotificationsView: View {
     }
 
     private func openSystemSettings() {
+        if #available(iOS 16.0, *) {
+            if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                UIApplication.shared.open(url)
+                return
+            }
+        }
+
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
     }

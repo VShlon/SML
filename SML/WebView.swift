@@ -1,8 +1,8 @@
 //
 //  WebView.swift
-//  SMC
+//  SML
 //
-//  Version: 1.0.2
+//  Version: 1.0.0
 //  Author: Nuvren.com
 //
 //  Назначение:
@@ -11,7 +11,8 @@
 //  - ROLE BRIDGE: whoami -> RoleState
 //  - Cookie sync fallback -> RoleState.refresh()
 //  - Inject apnsToken + deviceId
-//  - External links blocked (кроме нужных для reCAPTCHA)
+//  - External links blocked, кроме разрешенных хостов для reCAPTCHA
+//  - Native Face ID кнопка на login page в app версии
 //
 
 import SwiftUI
@@ -32,7 +33,9 @@ struct WebView: UIViewControllerRepresentable {
     let hasBiometricLogin: Bool
     let command: WebNavigationCommand?
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
 
     func makeUIViewController(context: Context) -> WebViewController {
         let vc = WebViewController()
@@ -66,6 +69,7 @@ struct WebView: UIViewControllerRepresentable {
             context.coordinator.applyCommandIfNeeded(webView: wv)
             if context.coordinator.didFinishOnce {
                 context.coordinator.tryInjectIntoPage(webView: wv, force: false)
+                context.coordinator.refreshNativeFaceIDButton(webView: wv)
             }
         }
     }
@@ -81,8 +85,9 @@ final class WebViewController: UIViewController {
 
     private var didLoadInitial = false
 
-    fileprivate func setFaceIDButtonVisible(_ visible: Bool, enabled: Bool) { }
-    fileprivate func positionFaceIDButton(x: CGFloat, y: CGFloat) { }
+    private var faceIDButton: UIButton?
+    private var faceIDTrailingConstraint: NSLayoutConstraint?
+    private var faceIDBottomConstraint: NSLayoutConstraint?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -132,12 +137,75 @@ final class WebViewController: UIViewController {
 
         self.webView = wv
 
+        setupFaceIDButton()
         loadInitialIfNeeded()
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         loadInitialIfNeeded()
+    }
+
+    private func setupFaceIDButton() {
+        let button = UIButton(type: .system)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.isHidden = true
+        button.isEnabled = false
+        button.alpha = 0
+
+        if let image = UIImage(systemName: "faceid") {
+            button.setImage(image, for: .normal)
+        } else {
+            button.setTitle("Face ID", for: .normal)
+        }
+
+        button.tintColor = UIColor.systemBlue
+        button.backgroundColor = UIColor.white
+        button.layer.cornerRadius = 28
+        button.layer.shadowColor = UIColor.black.withAlphaComponent(0.18).cgColor
+        button.layer.shadowOpacity = 1
+        button.layer.shadowRadius = 10
+        button.layer.shadowOffset = CGSize(width: 0, height: 4)
+        button.addTarget(self, action: #selector(didTapFaceIDButton), for: .touchUpInside)
+
+        view.addSubview(button)
+
+        let trailing = button.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16)
+        let bottom = button.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20)
+
+        NSLayoutConstraint.activate([
+            trailing,
+            bottom,
+            button.widthAnchor.constraint(equalToConstant: 56),
+            button.heightAnchor.constraint(equalToConstant: 56)
+        ])
+
+        faceIDTrailingConstraint = trailing
+        faceIDBottomConstraint = bottom
+        faceIDButton = button
+    }
+
+    @objc
+    private func didTapFaceIDButton() {
+        coordinator?.triggerBiometricFromNativeUI()
+    }
+
+    fileprivate func setFaceIDButtonVisible(_ visible: Bool, enabled: Bool) {
+        guard let button = faceIDButton else { return }
+
+        button.isEnabled = enabled
+        button.isHidden = !visible
+
+        UIView.animate(withDuration: 0.18) {
+            button.alpha = visible ? 1 : 0
+        }
+    }
+
+    fileprivate func positionFaceIDButton(x: CGFloat, y: CGFloat) {
+        guard let trailing = faceIDTrailingConstraint, let bottom = faceIDBottomConstraint else { return }
+        trailing.constant = x
+        bottom.constant = y
+        view.layoutIfNeeded()
     }
 
     private func loadInitialIfNeeded() {
@@ -169,8 +237,6 @@ extension WebView {
         private var currentBiometricEnabled: Bool = SMCBiometricSettings.shared.isEnabled
         private var currentHasBiometricLogin: Bool = SMCKeychain.hasLogin()
         private var pendingCredentialSave: SMCStoredLogin? = nil
-        private var biometricPromptedForPage: String = ""
-        private var lastLoginPageURL: String = ""
 
         private var lastInjectedToken: String = ""
         private var lastInjectedDeviceId: String = ""
@@ -208,26 +274,55 @@ extension WebView {
             currentDeviceId = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
             currentBiometricEnabled = biometricEnabled
             currentHasBiometricLogin = hasBiometricLogin
-            updateNativeFaceIDButton()
+
+            if let webView = attachedWebView {
+                refreshNativeFaceIDButton(webView: webView)
+            } else {
+                updateNativeFaceIDButton(visible: false, enabled: false)
+            }
         }
 
-        func setCommand(_ command: WebNavigationCommand?) { pendingCommand = command }
-        func markCommandHandled(_ id: UUID) { lastHandledCommandId = id }
+        func setCommand(_ command: WebNavigationCommand?) {
+            pendingCommand = command
+        }
+
+        func markCommandHandled(_ id: UUID) {
+            lastHandledCommandId = id
+        }
 
         func triggerBiometricFromNativeUI() {
             guard let webView = attachedWebView else { return }
             promptForBiometricLoginIfNeeded(webView: webView)
         }
 
-        private func updateNativeFaceIDButton(for webView: WKWebView? = nil) {
+        func refreshNativeFaceIDButton(webView: WKWebView) {
+            let urlString = webView.url?.absoluteString.lowercased() ?? ""
+            let path = webView.url?.path.lowercased() ?? ""
+            let looksLikeLogin = path.contains("/login") || urlString.contains("wp-login") || urlString.contains("/account")
+
+            let canShow =
+                looksLikeLogin &&
+                currentBiometricEnabled &&
+                currentHasBiometricLogin &&
+                BiometricAuthManager.shared.canUseBiometrics()
+
+            updateNativeFaceIDButton(visible: canShow, enabled: canShow)
+
+            if canShow {
+                layoutNativeFaceIDButton(on: webView, enabled: true)
+            }
+        }
+
+        private func updateNativeFaceIDButton(visible: Bool, enabled: Bool) {
             DispatchQueue.main.async { [weak self] in
-                self?.hostViewController?.setFaceIDButtonVisible(false, enabled: false)
+                self?.hostViewController?.setFaceIDButtonVisible(visible, enabled: enabled)
             }
         }
 
         private func layoutNativeFaceIDButton(on webView: WKWebView, enabled: Bool) {
             DispatchQueue.main.async { [weak self] in
-                self?.hostViewController?.setFaceIDButtonVisible(false, enabled: false)
+                self?.hostViewController?.positionFaceIDButton(x: -16, y: -20)
+                self?.hostViewController?.setFaceIDButtonVisible(enabled, enabled: enabled)
             }
         }
 
@@ -245,8 +340,9 @@ extension WebView {
                         _ = SMCKeychain.save(login: pendingCredentialSave)
                         self.pendingCredentialSave = nil
                         self.currentHasBiometricLogin = true
-                        DispatchQueue.main.async { PushState.shared.refreshBiometricState() }
-                        self.updateNativeFaceIDButton()
+                        DispatchQueue.main.async {
+                            PushState.shared.refreshBiometricState()
+                        }
                     }
 
                     DispatchQueue.main.async {
@@ -257,6 +353,11 @@ extension WebView {
                         RoleState.shared.setRoleFromBridge(role: s)
                     }
                 }
+
+                if let webView = attachedWebView {
+                    refreshNativeFaceIDButton(webView: webView)
+                }
+
                 return
             }
 
@@ -278,8 +379,10 @@ extension WebView {
                 pendingCredentialSave = nil
                 SMCKeychain.deleteLogin()
                 currentHasBiometricLogin = false
-                DispatchQueue.main.async { PushState.shared.refreshBiometricState() }
-                updateNativeFaceIDButton()
+                DispatchQueue.main.async {
+                    PushState.shared.refreshBiometricState()
+                }
+                updateNativeFaceIDButton(visible: false, enabled: false)
 
             default:
                 break
@@ -287,22 +390,37 @@ extension WebView {
         }
 
         private func isAllowedExternalHost(_ host: String) -> Bool {
-            if allowedExternalHosts.contains(host) { return true }
-            for h in allowedExternalHosts {
-                if host.hasSuffix("." + h) { return true }
+            if allowedExternalHosts.contains(host) {
+                return true
             }
+
+            for h in allowedExternalHosts {
+                if host.hasSuffix("." + h) {
+                    return true
+                }
+            }
+
             return false
         }
 
         func isExternalURL(_ url: URL) -> Bool {
             let scheme = (url.scheme ?? "").lowercased()
-            if scheme != "http" && scheme != "https" { return false }
+            if scheme != "http" && scheme != "https" {
+                return false
+            }
 
             let host = (url.host ?? "").lowercased()
-            if host.isEmpty { return false }
+            if host.isEmpty {
+                return false
+            }
 
-            if host == allowedHost || host.hasSuffix("." + allowedHost) { return false }
-            if isAllowedExternalHost(host) { return false }
+            if host == allowedHost || host.hasSuffix("." + allowedHost) {
+                return false
+            }
+
+            if isAllowedExternalHost(host) {
+                return false
+            }
 
             return true
         }
@@ -326,10 +444,11 @@ extension WebView {
             webView.load(URLRequest(url: cmd.url))
         }
 
-        func webView(_ webView: WKWebView,
-                     decidePolicyFor navigationAction: WKNavigationAction,
-                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
             guard let u = navigationAction.request.url else {
                 decisionHandler(.allow)
                 return
@@ -354,6 +473,7 @@ extension WebView {
                     decisionHandler(.cancel)
                     return
                 }
+
                 decisionHandler(.allow)
                 return
             }
@@ -367,13 +487,18 @@ extension WebView {
             decisionHandler(.allow)
         }
 
-        func webView(_ webView: WKWebView,
-                     createWebViewWith configuration: WKWebViewConfiguration,
-                     for navigationAction: WKNavigationAction,
-                     windowFeatures: WKWindowFeatures) -> WKWebView? {
-            guard let u = navigationAction.request.url else { return nil }
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            guard let u = navigationAction.request.url else {
+                return nil
+            }
 
             let scheme = (u.scheme ?? "").lowercased()
+
             if scheme == "tel" || scheme == "mailto" || scheme == "sms" || scheme == "facetime" || scheme == "facetime-audio" {
                 openExternally(u)
                 return nil
@@ -390,13 +515,17 @@ extension WebView {
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             let ns = error as NSError
-            if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled { return }
+            if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
+                return
+            }
             print("WEBVIEW didFail:", error.localizedDescription)
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             let ns = error as NSError
-            if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled { return }
+            if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
+                return
+            }
             print("WEBVIEW didFailProvisionalNavigation:", error.localizedDescription)
         }
 
@@ -417,18 +546,25 @@ extension WebView {
                 self.requestWhoamiViaWebView(webView: webView)
                 self.injectBiometricUIIfNeeded(webView: webView)
                 self.maybePersistPendingLoginAfterSuccessfulNavigation(webView: webView)
-                self.updateNativeFaceIDButton(for: webView)
+                self.refreshNativeFaceIDButton(webView: webView)
             }
         }
 
         private func requestWhoamiViaWebView(webView: WKWebView) {
             let now = Date().timeIntervalSince1970
-            if now - lastWhoamiAt < whoamiMinInterval { return }
+            if now - lastWhoamiAt < whoamiMinInterval {
+                return
+            }
             lastWhoamiAt = now
 
-            guard let currentURL = webView.url else { return }
+            guard let currentURL = webView.url else {
+                return
+            }
+
             let host = (currentURL.host ?? "").lowercased()
-            if !(host == allowedHost || host.hasSuffix("." + allowedHost)) { return }
+            if !(host == allowedHost || host.hasSuffix("." + allowedHost)) {
+                return
+            }
 
             let script = #"""
             (function () {
@@ -490,12 +626,19 @@ extension WebView {
 
         private func syncCookiesToSharedStorage(webView: WKWebView) {
             let now = Date().timeIntervalSince1970
-            if now - lastCookieSyncAt < cookieSyncMinInterval { return }
+            if now - lastCookieSyncAt < cookieSyncMinInterval {
+                return
+            }
             lastCookieSyncAt = now
 
-            guard let currentURL = webView.url else { return }
+            guard let currentURL = webView.url else {
+                return
+            }
+
             let host = (currentURL.host ?? "").lowercased()
-            if !(host == allowedHost || host.hasSuffix("." + allowedHost)) { return }
+            if !(host == allowedHost || host.hasSuffix("." + allowedHost)) {
+                return
+            }
 
             let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
             cookieStore.getAllCookies { [weak self] cookies in
@@ -509,6 +652,7 @@ extension WebView {
                             shared.setCookie(c)
                         }
                     }
+
                     DispatchQueue.main.async {
                         RoleState.shared.refresh()
                     }
@@ -530,7 +674,9 @@ extension WebView {
             let page = webView.url?.absoluteString ?? ""
 
             if !force {
-                if token == lastInjectedToken && device == lastInjectedDeviceId && page == lastInjectedURL { return }
+                if token == lastInjectedToken && device == lastInjectedDeviceId && page == lastInjectedURL {
+                    return
+                }
             }
 
             lastInjectedToken = token
@@ -697,12 +843,14 @@ extension WebView {
             guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") else {
                 return nil
             }
+
             guard let data = try? Data(contentsOf: url), let content = String(data: data, encoding: .ascii) else {
                 return nil
             }
 
             let startTag = "<plist"
             let endTag = "</plist>"
+
             guard let startRange = content.range(of: startTag), let endRange = content.range(of: endTag) else {
                 return nil
             }
@@ -732,16 +880,8 @@ extension WebView {
         }
 
         private func injectBiometricUIIfNeeded(webView: WKWebView) {
-            let urlString = webView.url?.absoluteString.lowercased() ?? ""
-            let path = webView.url?.path.lowercased() ?? ""
-            let looksLikeLogin = path.contains("/login") || urlString.contains("wp-login")
-            if looksLikeLogin {
-                lastLoginPageURL = webView.url?.absoluteString ?? ""
-            } else {
-                biometricPromptedForPage = ""
-            }
             tryInjectIntoPage(webView: webView, force: true)
-            updateNativeFaceIDButton(for: webView)
+            refreshNativeFaceIDButton(webView: webView)
         }
 
         private func maybePersistPendingLoginAfterSuccessfulNavigation(webView: WKWebView) {
@@ -750,14 +890,18 @@ extension WebView {
             let urlString = webView.url?.absoluteString.lowercased() ?? ""
             let path = webView.url?.path.lowercased() ?? ""
             let looksLikeLogin = path.contains("/login") || urlString.contains("wp-login")
-            if looksLikeLogin { return }
+            if looksLikeLogin {
+                return
+            }
 
             if currentBiometricEnabled {
                 _ = SMCKeychain.save(login: pendingCredentialSave)
                 self.pendingCredentialSave = nil
                 currentHasBiometricLogin = true
-                DispatchQueue.main.async { PushState.shared.refreshBiometricState() }
-                updateNativeFaceIDButton(for: webView)
+                DispatchQueue.main.async {
+                    PushState.shared.refreshBiometricState()
+                }
+                refreshNativeFaceIDButton(webView: webView)
                 return
             }
 
@@ -778,9 +922,11 @@ extension WebView {
                 message: "Save this login so you can sign in faster next time with Face ID.",
                 preferredStyle: .alert
             )
+
             alert.addAction(UIAlertAction(title: "Not now", style: .cancel) { [weak self] _ in
                 self?.pendingCredentialSave = nil
             })
+
             alert.addAction(UIAlertAction(title: "Use Face ID", style: .default) { [weak self] _ in
                 guard let self else { return }
                 _ = SMCKeychain.save(login: login)
@@ -791,8 +937,11 @@ extension WebView {
                     PushState.shared.setBiometricEnabled(true)
                     PushState.shared.refreshBiometricState()
                 }
-                self.updateNativeFaceIDButton()
+                if let webView = self.attachedWebView {
+                    self.refreshNativeFaceIDButton(webView: webView)
+                }
             })
+
             DispatchQueue.main.async {
                 host.present(alert, animated: true)
             }
@@ -811,6 +960,7 @@ extension WebView {
         private func fillAndSubmitLogin(webView: WKWebView, login: SMCStoredLogin) {
             let userJS = jsString(login.username)
             let passJS = jsString(login.password)
+
             let js = """
             (function () {
               try {
@@ -818,8 +968,14 @@ extension WebView {
                 var user = document.querySelector('input[name="log"], input[name="username"], input[type="email"], input[type="text"]');
                 var pass = document.querySelector('input[name="pwd"], input[name="password"], input[type="password"]');
                 if (!user || !pass) return false;
-                user.focus(); user.value = \(userJS); user.dispatchEvent(new Event('input', { bubbles: true })); user.dispatchEvent(new Event('change', { bubbles: true }));
-                pass.focus(); pass.value = \(passJS); pass.dispatchEvent(new Event('input', { bubbles: true })); pass.dispatchEvent(new Event('change', { bubbles: true }));
+                user.focus();
+                user.value = \(userJS);
+                user.dispatchEvent(new Event('input', { bubbles: true }));
+                user.dispatchEvent(new Event('change', { bubbles: true }));
+                pass.focus();
+                pass.value = \(passJS);
+                pass.dispatchEvent(new Event('input', { bubbles: true }));
+                pass.dispatchEvent(new Event('change', { bubbles: true }));
                 if (!form) { form = user.form || pass.form; }
                 if (form) {
                   form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -827,11 +983,17 @@ extension WebView {
                   return true;
                 }
                 var btn = document.querySelector('button[type="submit"], input[type="submit"]');
-                if (btn) { btn.click(); return true; }
+                if (btn) {
+                  btn.click();
+                  return true;
+                }
                 return false;
-              } catch (e) { return false; }
+              } catch (e) {
+                return false;
+              }
             })();
             """
+
             webView.evaluateJavaScript(js, completionHandler: nil)
         }
 
@@ -853,13 +1015,16 @@ extension WebView {
             guard
                 let data = try? JSONSerialization.data(withJSONObject: [value], options: []),
                 var str = String(data: data, encoding: .utf8)
-            else { return "\"\"" }
+            else {
+                return "\"\""
+            }
 
             if str.count >= 4, str.hasPrefix("["), str.hasSuffix("]") {
                 str.removeFirst()
                 str.removeLast()
                 return str
             }
+
             return "\"\""
         }
     }

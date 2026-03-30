@@ -1,15 +1,16 @@
 //
 //  RoleState.swift
-//  SMC
+//  SML
 //
-//  Version: 1.0.1
+//  Version: 1.0.0
 //  Author: Nuvren.com
 //
 //  Назначение:
-//  - Источник правды для режима меню (guest/client/worker/accountant/admin)
-//  - Основной способ: роль приходит из WebView через bridge (JS fetch + credentials)
-//  - Fallback: URLSession whoami
-//  - Защита: авторизованный пользователь не должен падать в guest от временного сбоя whoami
+//  - Источник правды для режима меню.
+//  - Режимы: guest, client, worker, accountant, admin, owner, menager.
+//  - Основной способ: роль приходит из WebView через bridge.
+//  - Fallback: URLSession whoami.
+//  - Защита: авторизованный пользователь не должен падать в guest от временного сбоя whoami.
 //
 
 import Foundation
@@ -25,6 +26,8 @@ final class RoleState: ObservableObject {
         case worker
         case accountant
         case admin
+        case owner
+        case menager
     }
 
     @Published private(set) var mode: Mode = .guest
@@ -54,8 +57,6 @@ final class RoleState: ObservableObject {
         restorePersistedAuthorizedRoleIfNeeded()
     }
 
-    // MARK: - Preferred: set role from WebView bridge
-
     func setRoleFromBridge(role raw: String?) {
         lastError = nil
         resolveAndApply(from: [
@@ -68,14 +69,17 @@ final class RoleState: ObservableObject {
         resolveAndApply(from: payload)
     }
 
-    // MARK: - Fallback: URLSession whoami
-
     func refresh() {
         let now = Date().timeIntervalSince1970
-        if now - lastRefreshAt < minRefreshInterval { return }
+        if now - lastRefreshAt < minRefreshInterval {
+            return
+        }
         lastRefreshAt = now
 
-        if isLoading { return }
+        if isLoading {
+            return
+        }
+
         isLoading = true
         lastError = nil
 
@@ -95,6 +99,7 @@ final class RoleState: ObservableObject {
                         self.applyGuest(clearPersisted: true)
                         return
                     }
+
                     if http.statusCode < 200 || http.statusCode >= 300 {
                         self.lastError = "whoami HTTP \(http.statusCode)"
                         self.keepAuthorizedRoleIfPossible()
@@ -117,8 +122,6 @@ final class RoleState: ObservableObject {
             }
         }
     }
-
-    // MARK: - Resolve role
 
     private func resolveAndApply(from payload: [String: Any]) {
         if isExplicitUnauthorized(payload) {
@@ -169,9 +172,11 @@ final class RoleState: ObservableObject {
             if let s = value as? String, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 out.append(s)
             }
+
             if let arr = value as? [String] {
                 out.append(contentsOf: arr)
             }
+
             if let arr = value as? [Any] {
                 for item in arr {
                     if let s = item as? String, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -204,25 +209,75 @@ final class RoleState: ObservableObject {
 
     private func resolveRole(_ raw: String) -> (mode: Mode, rawRole: String)? {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if value.isEmpty { return nil }
+        if value.isEmpty {
+            return nil
+        }
 
-        if containsAny(value, ["administrator", "admin", "owner", "manager", "workspace", "all-tasks", "create-task", "wp-admin"]) {
+        if containsAny(value, [
+            "owner",
+            "site_owner",
+            "business_owner"
+        ]) {
+            return (.owner, "owner")
+        }
+
+        if containsAny(value, [
+            "menager",
+            "manager",
+            "site_manager",
+            "project_manager"
+        ]) {
+            return (.menager, "menager")
+        }
+
+        if containsAny(value, [
+            "administrator",
+            "admin",
+            "wp-admin"
+        ]) {
             return (.admin, "admin")
         }
 
-        if containsAny(value, ["accountant", "bookkeeper", "finance", "billing", "payroll", "monthly-billing", "payroll-review"]) {
+        if containsAny(value, [
+            "accountant",
+            "bookkeeper",
+            "finance",
+            "billing",
+            "payroll",
+            "monthly-billing",
+            "payroll-review"
+        ]) {
             return (.accountant, "accountant")
         }
 
-        if containsAny(value, ["worker", "employee", "crew", "technician", "workday", "tasks-today", "report"]) {
+        if containsAny(value, [
+            "worker",
+            "employee",
+            "crew",
+            "technician",
+            "workday",
+            "tasks-today",
+            "report"
+        ]) {
             return (.worker, "worker")
         }
 
-        if containsAny(value, ["client", "customer", "customers", "commercial", "residential", "member", "subscriber", "invoices", "my-requests", "order-history", "/account", "/orders"] ) {
+        if containsAny(value, [
+            "client",
+            "customer",
+            "customers",
+            "commercial",
+            "residential",
+            "member",
+            "subscriber"
+        ]) {
             return (.client, "client")
         }
 
-        if containsAny(value, ["guest", "anonymous"]) {
+        if containsAny(value, [
+            "guest",
+            "anonymous"
+        ]) {
             return nil
         }
 
@@ -238,14 +293,18 @@ final class RoleState: ObservableObject {
         if let resolved = resolveRole(joined) {
             return resolved.mode
         }
+
         return nil
     }
 
-    // MARK: - Auth hints
-
     private func isExplicitUnauthorized(_ payload: [String: Any]) -> Bool {
-        if let status = extractInt(payload["status"]), status == 401 || status == 403 { return true }
-        if let status = extractInt(payload["http_status"]), status == 401 || status == 403 { return true }
+        if let status = extractInt(payload["status"]), status == 401 || status == 403 {
+            return true
+        }
+
+        if let status = extractInt(payload["http_status"]), status == 401 || status == 403 {
+            return true
+        }
 
         let role = extractString(payload["role"]).lowercased()
         let authenticated = isAuthenticated(payload)
@@ -258,17 +317,34 @@ final class RoleState: ObservableObject {
     }
 
     private func isAuthenticated(_ payload: [String: Any]) -> Bool {
-        if let b = extractBool(payload["authenticated"]) { return b }
-        if let b = extractBool(payload["logged_in"]) { return b }
-        if let b = extractBool(payload["is_logged_in"]) { return b }
-        if let b = extractBool(payload["isAuthenticated"]) { return b }
+        if let b = extractBool(payload["authenticated"]) {
+            return b
+        }
+
+        if let b = extractBool(payload["logged_in"]) {
+            return b
+        }
+
+        if let b = extractBool(payload["is_logged_in"]) {
+            return b
+        }
+
+        if let b = extractBool(payload["isAuthenticated"]) {
+            return b
+        }
 
         let bodyClass = extractString(payload["body_class"]).lowercased()
-        if bodyClass.contains("logged-in") { return true }
+        if bodyClass.contains("logged-in") {
+            return true
+        }
 
         let href = extractString(payload["href"]).lowercased()
         let path = extractString(payload["current_path"]).lowercased()
-        if href.contains("/my-account") || href.contains("/account/") || path.contains("/my-account") || path.contains("/account/") {
+
+        if href.contains("/my-account")
+            || href.contains("/account/")
+            || path.contains("/my-account")
+            || path.contains("/account/") {
             return true
         }
 
@@ -276,14 +352,16 @@ final class RoleState: ObservableObject {
     }
 
     private func hasAnyAuthHint(_ payload: [String: Any]) -> Bool {
-        if payload.keys.contains("authenticated") || payload.keys.contains("logged_in") || payload.keys.contains("is_logged_in") || payload.keys.contains("isAuthenticated") {
+        if payload.keys.contains("authenticated")
+            || payload.keys.contains("logged_in")
+            || payload.keys.contains("is_logged_in")
+            || payload.keys.contains("isAuthenticated") {
             return true
         }
+
         let bodyClass = extractString(payload["body_class"]).lowercased()
         return bodyClass.contains("logged-in")
     }
-
-    // MARK: - Apply state
 
     private func applyAuthorized(mode newMode: Mode, wpRole newRole: String) {
         mode = newMode
@@ -294,6 +372,7 @@ final class RoleState: ObservableObject {
     private func applyGuest(clearPersisted: Bool) {
         mode = .guest
         wpRole = "guest"
+
         if clearPersisted {
             clearPersistedAuthorizedRole()
         }
@@ -320,18 +399,28 @@ final class RoleState: ObservableObject {
 
     private func wpRoleForMode(_ mode: Mode) -> String {
         switch mode {
-        case .guest: return "guest"
-        case .client: return "client"
-        case .worker: return "worker"
-        case .accountant: return "accountant"
-        case .admin: return "admin"
+        case .guest:
+            return "guest"
+        case .client:
+            return "client"
+        case .worker:
+            return "worker"
+        case .accountant:
+            return "accountant"
+        case .admin:
+            return "admin"
+        case .owner:
+            return "owner"
+        case .menager:
+            return "menager"
         }
     }
 
-    // MARK: - Persistence
-
     private func persistAuthorized(mode: Mode, wpRole: String) {
-        guard mode != .guest else { return }
+        guard mode != .guest else {
+            return
+        }
+
         UserDefaults.standard.set(mode.rawValue, forKey: storedModeKey)
         UserDefaults.standard.set(wpRole, forKey: storedRoleKey)
     }
@@ -342,20 +431,29 @@ final class RoleState: ObservableObject {
     }
 
     private func restorePersistedAuthorizedRoleIfNeeded() {
-        guard mode == .guest else { return }
-        guard let persisted = persistedAuthorizedMode() else { return }
+        guard mode == .guest else {
+            return
+        }
+
+        guard let persisted = persistedAuthorizedMode() else {
+            return
+        }
+
         mode = persisted
         wpRole = UserDefaults.standard.string(forKey: storedRoleKey) ?? wpRoleForMode(persisted)
     }
 
     private func persistedAuthorizedMode() -> Mode? {
-        guard let raw = UserDefaults.standard.string(forKey: storedModeKey), let stored = Mode(rawValue: raw), stored != .guest else {
+        guard
+            let raw = UserDefaults.standard.string(forKey: storedModeKey),
+            let stored = Mode(rawValue: raw),
+            stored != .guest
+        else {
             return nil
         }
+
         return stored
     }
-
-    // MARK: - Helpers
 
     private func containsAny(_ text: String, _ needles: [String]) -> Bool {
         for needle in needles where text.contains(needle) {
@@ -365,26 +463,54 @@ final class RoleState: ObservableObject {
     }
 
     private func extractString(_ value: Any?) -> String {
-        if let s = value as? String { return s }
-        if let n = value as? NSNumber { return n.stringValue }
+        if let s = value as? String {
+            return s
+        }
+
+        if let n = value as? NSNumber {
+            return n.stringValue
+        }
+
         return ""
     }
 
     private func extractInt(_ value: Any?) -> Int? {
-        if let i = value as? Int { return i }
-        if let n = value as? NSNumber { return n.intValue }
-        if let s = value as? String { return Int(s) }
+        if let i = value as? Int {
+            return i
+        }
+
+        if let n = value as? NSNumber {
+            return n.intValue
+        }
+
+        if let s = value as? String {
+            return Int(s)
+        }
+
         return nil
     }
 
     private func extractBool(_ value: Any?) -> Bool? {
-        if let b = value as? Bool { return b }
-        if let n = value as? NSNumber { return n.boolValue }
+        if let b = value as? Bool {
+            return b
+        }
+
+        if let n = value as? NSNumber {
+            return n.boolValue
+        }
+
         if let s = value as? String {
             let v = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if v == "true" || v == "1" || v == "yes" { return true }
-            if v == "false" || v == "0" || v == "no" { return false }
+
+            if v == "true" || v == "1" || v == "yes" {
+                return true
+            }
+
+            if v == "false" || v == "0" || v == "no" {
+                return false
+            }
         }
+
         return nil
     }
 }

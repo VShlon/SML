@@ -1,20 +1,21 @@
 //
 //  MoreRootView.swift
-//  SMC
+//  SML
 //
 //  Version: 1.0.0
 //  Author: Nuvren.com
 //
 //  Назначение:
 //  - More экран в стандартном iOS стиле
-//  - Показ как sheet/fullScreenCover
-//  - SML ссылки, контакты, соцсети и Face ID логин
+//  - Показ как sheet
+//  - Внутренние ссылки SML открываются поверх основного окна приложения
+//  - Контакты, соцсети и Face ID логин
 //
 
 import SwiftUI
 import UIKit
 
-struct SMCMoreRootView: View {
+struct SMLMoreRootView: View {
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var push = PushState.shared
@@ -41,29 +42,43 @@ struct SMCMoreRootView: View {
         NavigationStack {
             List {
                 Section {
-                    navButton(.account, system: "person", title: "Account")
+                    pageButton(title: "Account", system: "person", url: linkAccount)
                     navButton(.notifications, system: "bell", title: "Notifications")
                 }
 
                 Section {
-                    navButton(.services, system: "leaf", title: "Services")
-                    navButton(.projects, system: "square.grid.2x2", title: "Projects")
-                    navButton(.contact, system: "phone", title: "Contact")
-                    navButton(.report, system: "doc.text.magnifyingglass", title: "Report")
-                    navButton(.privacy, system: "hand.raised", title: "Privacy Policy")
-                    navButton(.terms, system: "doc.text", title: "Terms of Service")
+                    pageButton(title: "Services", system: "leaf", url: linkServices)
+                    pageButton(title: "Projects", system: "square.grid.2x2", url: linkProjects)
+                    pageButton(title: "Contact", system: "phone", url: linkContact)
+                    pageButton(title: "Report", system: "doc.text.magnifyingglass", url: linkReport)
+                    pageButton(title: "Privacy Policy", system: "hand.raised", url: linkPrivacy)
+                    pageButton(title: "Terms of Service", system: "doc.text", url: linkTerms)
                 } header: {
                     sectionHeader("IMPORTANT LINKS")
                 }
 
                 Section {
-                    Button { openExternal(linkInstagram) } label: {
-                        rowCustomIcon(assetName: "icon_instagram", fallbackSystem: "camera", title: "Instagram", showsChevron: false)
+                    Button {
+                        openExternal(linkInstagram)
+                    } label: {
+                        rowCustomIcon(
+                            assetName: "icon_instagram",
+                            fallbackSystem: "camera",
+                            title: "Instagram",
+                            showsChevron: false
+                        )
                     }
                     .buttonStyle(.plain)
 
-                    Button { openExternal(linkFacebook) } label: {
-                        rowCustomIcon(assetName: "icon_facebook", fallbackSystem: "f.cursive", title: "Facebook", showsChevron: false)
+                    Button {
+                        openExternal(linkFacebook)
+                    } label: {
+                        rowCustomIcon(
+                            assetName: "icon_facebook",
+                            fallbackSystem: "f.cursive",
+                            title: "Facebook",
+                            showsChevron: false
+                        )
                     }
                     .buttonStyle(.plain)
                 } header: {
@@ -71,24 +86,34 @@ struct SMCMoreRootView: View {
                 }
 
                 Section {
-                    Button { callPhone() } label: {
+                    Button {
+                        callPhone()
+                    } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "phone")
                                 .frame(width: 22)
+
                             Text(phoneDisplay)
+
                             Spacer()
+
                             Text("Call")
                         }
                         .foregroundStyle(brand)
                     }
                     .buttonStyle(.plain)
 
-                    Button { sendEmail() } label: {
+                    Button {
+                        sendEmail()
+                    } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "envelope")
                                 .frame(width: 22)
+
                             Text(email)
+
                             Spacer()
+
                             Text("Email")
                         }
                         .foregroundStyle(brand)
@@ -103,6 +128,7 @@ struct SMCMoreRootView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "faceid")
                                 .frame(width: 22)
+
                             Text("Enable Face ID")
                         }
                         .foregroundStyle(brand)
@@ -150,8 +176,10 @@ struct SMCMoreRootView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { dismiss() }
-                        .foregroundStyle(brand)
+                    Button("Close") {
+                        dismiss()
+                    }
+                    .foregroundStyle(brand)
                 }
             }
         }
@@ -166,26 +194,21 @@ struct SMCMoreRootView: View {
                 .preferredColorScheme(.light)
                 .navigationTitle("Notifications")
                 .navigationBarTitleDisplayMode(.inline)
-        case .account:
-            InAppWebScreen(title: "Account", url: linkAccount)
-        case .services:
-            InAppWebScreen(title: "Services", url: linkServices)
-        case .projects:
-            InAppWebScreen(title: "Projects", url: linkProjects)
-        case .contact:
-            InAppWebScreen(title: "Contact", url: linkContact)
-        case .report:
-            InAppWebScreen(title: "Report", url: linkReport)
-        case .privacy:
-            InAppWebScreen(title: "Privacy Policy", url: linkPrivacy)
-        case .terms:
-            InAppWebScreen(title: "Terms of Service", url: linkTerms)
         }
     }
 
     private func navButton(_ destinationValue: MoreDestination, system: String, title: String) -> some View {
         Button {
             destination = destinationValue
+        } label: {
+            row(system: system, title: title, showsChevron: true)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func pageButton(title: String, system: String, url: URL) -> some View {
+        Button {
+            openMainWindowPage(title: title, url: url)
         } label: {
             row(system: system, title: title, showsChevron: true)
         }
@@ -206,8 +229,11 @@ struct SMCMoreRootView: View {
         HStack(spacing: 12) {
             Image(systemName: system)
                 .frame(width: 22)
+
             Text(title)
+
             Spacer()
+
             if showsChevron {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
@@ -229,13 +255,26 @@ struct SMCMoreRootView: View {
             .frame(width: 22)
 
             Text(title)
+
             Spacer()
+
             if showsChevron {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
             }
         }
         .foregroundStyle(brand)
+    }
+
+    private func openMainWindowPage(title: String, url: URL) {
+        NotificationCenter.default.post(
+            name: .smlPresentMainWindowPage,
+            object: nil,
+            userInfo: [
+                "title": title,
+                "url": url
+            ]
+        )
     }
 
     private func openExternal(_ url: URL) {
@@ -258,35 +297,7 @@ struct SMCMoreRootView: View {
 }
 
 private enum MoreDestination: String, Identifiable {
-    case account
     case notifications
-    case services
-    case projects
-    case contact
-    case report
-    case privacy
-    case terms
 
     var id: String { rawValue }
-}
-
-private struct InAppWebScreen: View {
-    let title: String
-    let url: URL
-
-    @StateObject private var push = PushState.shared
-
-    var body: some View {
-        WebView(
-            url: url,
-            apnsToken: push.apnsToken,
-            deviceId: push.deviceId,
-            biometricEnabled: push.biometricEnabled,
-            hasBiometricLogin: push.hasBiometricLogin,
-            command: nil
-        )
-        .preferredColorScheme(.light)
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-    }
 }

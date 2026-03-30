@@ -1,20 +1,20 @@
 //
-//  SMCApp.swift
-//  SMC
+//  SMLApp.swift
+//  SML
 //
-//  Версия: 1.0.0
-//  Автор: Nuvren.com
+//  Version: 1.0.0
+//  Author: Nuvren.com
 //
-//  Назначение (по-русски):
-//  - Главная точка входа приложения;
-//  - Подключает AppDelegate (нужен для локальных уведомлений в foreground);
-//  - Запускает ContentView (вкладки сайта + вкладка App-настроек).
+//  Назначение:
+//  - Главная точка входа приложения
+//  - Подключает AppDelegate
+//  - Запускает ContentView
 //
 
 import SwiftUI
 
 @main
-struct SMCApp: App {
+struct SMLApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
