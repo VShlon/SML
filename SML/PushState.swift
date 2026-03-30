@@ -96,6 +96,67 @@ enum SMCKeychain {
     }
 }
 
+
+
+enum SMCDeviceRegistrationKeychain {
+    private static let service = "ca.stmaryslandscaping.app.push-registration"
+    private static let account = "stable-device-id"
+
+    static func readDeviceId() -> String {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data, let value = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func saveDeviceId(_ value: String) -> Bool {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty, let data = normalized.data(using: .utf8) else {
+            return false
+        }
+
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+
+        return SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess
+    }
+
+    static func stableDeviceId() -> String {
+        let stored = readDeviceId()
+        if !stored.isEmpty {
+            return stored
+        }
+
+        let generated = UIDevice.current.identifierForVendor?.uuidString.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let fallback = !generated.isEmpty ? generated : UUID().uuidString.lowercased()
+        _ = saveDeviceId(fallback)
+        return fallback
+    }
+}
+
 final class BiometricAuthManager {
     static let shared = BiometricAuthManager()
 
@@ -149,8 +210,8 @@ final class PushState: ObservableObject {
     private let base = URL(string: "https://stmaryslandscaping.ca")!
 
     private init() {
-        let did = UIDevice.current.identifierForVendor?.uuidString ?? ""
-        deviceId = did.isEmpty ? "ios-device" : did
+        let stableId = SMCDeviceRegistrationKeychain.stableDeviceId()
+        deviceId = stableId.isEmpty ? "ios-device" : stableId
     }
 
     func setApnsToken(_ token: String) {

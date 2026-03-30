@@ -12,12 +12,12 @@
 //  - Cookie sync fallback -> RoleState.refresh()
 //  - Inject apnsToken + deviceId
 //  - External links blocked, кроме разрешенных хостов для reCAPTCHA
-//  - Native Face ID кнопка на login page в app версии
 //
 
 import SwiftUI
 import WebKit
 import UIKit
+import Security
 
 struct WebNavigationCommand: Equatable {
     let id: UUID
@@ -69,7 +69,6 @@ struct WebView: UIViewControllerRepresentable {
             context.coordinator.applyCommandIfNeeded(webView: wv)
             if context.coordinator.didFinishOnce {
                 context.coordinator.tryInjectIntoPage(webView: wv, force: false)
-                context.coordinator.refreshNativeFaceIDButton(webView: wv)
             }
         }
     }
@@ -85,9 +84,6 @@ final class WebViewController: UIViewController {
 
     private var didLoadInitial = false
 
-    private var faceIDButton: UIButton?
-    private var faceIDTrailingConstraint: NSLayoutConstraint?
-    private var faceIDBottomConstraint: NSLayoutConstraint?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -137,75 +133,12 @@ final class WebViewController: UIViewController {
 
         self.webView = wv
 
-        setupFaceIDButton()
         loadInitialIfNeeded()
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         loadInitialIfNeeded()
-    }
-
-    private func setupFaceIDButton() {
-        let button = UIButton(type: .system)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.isHidden = true
-        button.isEnabled = false
-        button.alpha = 0
-
-        if let image = UIImage(systemName: "faceid") {
-            button.setImage(image, for: .normal)
-        } else {
-            button.setTitle("Face ID", for: .normal)
-        }
-
-        button.tintColor = UIColor.systemBlue
-        button.backgroundColor = UIColor.white
-        button.layer.cornerRadius = 28
-        button.layer.shadowColor = UIColor.black.withAlphaComponent(0.18).cgColor
-        button.layer.shadowOpacity = 1
-        button.layer.shadowRadius = 10
-        button.layer.shadowOffset = CGSize(width: 0, height: 4)
-        button.addTarget(self, action: #selector(didTapFaceIDButton), for: .touchUpInside)
-
-        view.addSubview(button)
-
-        let trailing = button.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16)
-        let bottom = button.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20)
-
-        NSLayoutConstraint.activate([
-            trailing,
-            bottom,
-            button.widthAnchor.constraint(equalToConstant: 56),
-            button.heightAnchor.constraint(equalToConstant: 56)
-        ])
-
-        faceIDTrailingConstraint = trailing
-        faceIDBottomConstraint = bottom
-        faceIDButton = button
-    }
-
-    @objc
-    private func didTapFaceIDButton() {
-        coordinator?.triggerBiometricFromNativeUI()
-    }
-
-    fileprivate func setFaceIDButtonVisible(_ visible: Bool, enabled: Bool) {
-        guard let button = faceIDButton else { return }
-
-        button.isEnabled = enabled
-        button.isHidden = !visible
-
-        UIView.animate(withDuration: 0.18) {
-            button.alpha = visible ? 1 : 0
-        }
-    }
-
-    fileprivate func positionFaceIDButton(x: CGFloat, y: CGFloat) {
-        guard let trailing = faceIDTrailingConstraint, let bottom = faceIDBottomConstraint else { return }
-        trailing.constant = x
-        bottom.constant = y
-        view.layoutIfNeeded()
     }
 
     private func loadInitialIfNeeded() {
@@ -274,12 +207,6 @@ extension WebView {
             currentDeviceId = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
             currentBiometricEnabled = biometricEnabled
             currentHasBiometricLogin = hasBiometricLogin
-
-            if let webView = attachedWebView {
-                refreshNativeFaceIDButton(webView: webView)
-            } else {
-                updateNativeFaceIDButton(visible: false, enabled: false)
-            }
         }
 
         func setCommand(_ command: WebNavigationCommand?) {
@@ -288,42 +215,6 @@ extension WebView {
 
         func markCommandHandled(_ id: UUID) {
             lastHandledCommandId = id
-        }
-
-        func triggerBiometricFromNativeUI() {
-            guard let webView = attachedWebView else { return }
-            promptForBiometricLoginIfNeeded(webView: webView)
-        }
-
-        func refreshNativeFaceIDButton(webView: WKWebView) {
-            let urlString = webView.url?.absoluteString.lowercased() ?? ""
-            let path = webView.url?.path.lowercased() ?? ""
-            let looksLikeLogin = path.contains("/login") || urlString.contains("wp-login") || urlString.contains("/account")
-
-            let canShow =
-                looksLikeLogin &&
-                currentBiometricEnabled &&
-                currentHasBiometricLogin &&
-                BiometricAuthManager.shared.canUseBiometrics()
-
-            updateNativeFaceIDButton(visible: canShow, enabled: canShow)
-
-            if canShow {
-                layoutNativeFaceIDButton(on: webView, enabled: true)
-            }
-        }
-
-        private func updateNativeFaceIDButton(visible: Bool, enabled: Bool) {
-            DispatchQueue.main.async { [weak self] in
-                self?.hostViewController?.setFaceIDButtonVisible(visible, enabled: enabled)
-            }
-        }
-
-        private func layoutNativeFaceIDButton(on webView: WKWebView, enabled: Bool) {
-            DispatchQueue.main.async { [weak self] in
-                self?.hostViewController?.positionFaceIDButton(x: -16, y: -20)
-                self?.hostViewController?.setFaceIDButtonVisible(enabled, enabled: enabled)
-            }
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -354,10 +245,6 @@ extension WebView {
                     }
                 }
 
-                if let webView = attachedWebView {
-                    refreshNativeFaceIDButton(webView: webView)
-                }
-
                 return
             }
 
@@ -382,8 +269,6 @@ extension WebView {
                 DispatchQueue.main.async {
                     PushState.shared.refreshBiometricState()
                 }
-                updateNativeFaceIDButton(visible: false, enabled: false)
-
             default:
                 break
             }
@@ -546,7 +431,6 @@ extension WebView {
                 self.requestWhoamiViaWebView(webView: webView)
                 self.injectBiometricUIIfNeeded(webView: webView)
                 self.maybePersistPendingLoginAfterSuccessfulNavigation(webView: webView)
-                self.refreshNativeFaceIDButton(webView: webView)
             }
         }
 
@@ -669,7 +553,15 @@ extension WebView {
             let bundleId = Bundle.main.bundleIdentifier ?? ""
             let appVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
             let buildNumber = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? ""
-            let pushEnvironment = currentPushEnvironment()
+            let registrationContext = currentPushRegistrationContext()
+            let pushEnvironment = registrationContext.environment
+            let distributionChannel = registrationContext.distribution
+            let signedEnvironment = registrationContext.signedEnvironment
+            let provisioningEnvironment = registrationContext.provisioningEnvironment
+            let receiptEnvironment = registrationContext.receiptEnvironment
+            let isTestFlight = registrationContext.isTestFlight
+            let isDebugBuild = registrationContext.isDebugBuild
+            let isReleaseBuild = registrationContext.isReleaseBuild
 
             let page = webView.url?.absoluteString ?? ""
 
@@ -689,6 +581,13 @@ extension WebView {
             let appVersionJS = jsString(appVersion)
             let buildNumberJS = jsString(buildNumber)
             let pushEnvironmentJS = jsString(pushEnvironment)
+            let distributionChannelJS = jsString(distributionChannel)
+            let signedEnvironmentJS = jsString(signedEnvironment)
+            let provisioningEnvironmentJS = jsString(provisioningEnvironment)
+            let receiptEnvironmentJS = jsString(receiptEnvironment)
+            let isTestFlightJS = isTestFlight ? "true" : "false"
+            let isDebugBuildJS = isDebugBuild ? "true" : "false"
+            let isReleaseBuildJS = isReleaseBuild ? "true" : "false"
             let biometricEnabledJS = biometricEnabled ? "true" : "false"
             let hasBiometricLoginJS = hasBiometricLogin ? "true" : "false"
 
@@ -706,6 +605,15 @@ extension WebView {
               window.SML_APP.appVersion = \(appVersionJS);
               window.SML_APP.buildNumber = \(buildNumberJS);
               window.SML_APP.pushEnvironment = \(pushEnvironmentJS);
+              window.SML_APP.distribution = \(distributionChannelJS);
+              window.SML_APP.releaseChannel = \(distributionChannelJS);
+              window.SML_APP.signedEnvironment = \(signedEnvironmentJS);
+              window.SML_APP.provisioningEnvironment = \(provisioningEnvironmentJS);
+              window.SML_APP.receiptEnvironment = \(receiptEnvironmentJS);
+              window.SML_APP.isTestFlight = \(isTestFlightJS);
+              window.SML_APP.isDebugBuild = \(isDebugBuildJS);
+              window.SML_APP.isReleaseBuild = \(isReleaseBuildJS);
+              window.SML_APP.isProductionBuild = \(isReleaseBuildJS);
               window.SML_APP.isApp = true;
               window.SML_APP.platform = "ios";
               window.SML_APP.biometricEnabled = \(biometricEnabledJS);
@@ -732,7 +640,14 @@ extension WebView {
                     bundleId: window.SML_APP.bundleId,
                     appVersion: window.SML_APP.appVersion,
                     buildNumber: window.SML_APP.buildNumber,
-                    pushEnvironment: window.SML_APP.pushEnvironment
+                    pushEnvironment: window.SML_APP.pushEnvironment,
+                    distribution: window.SML_APP.distribution,
+                    signedEnvironment: window.SML_APP.signedEnvironment,
+                    provisioningEnvironment: window.SML_APP.provisioningEnvironment,
+                    receiptEnvironment: window.SML_APP.receiptEnvironment,
+                    isTestFlight: window.SML_APP.isTestFlight,
+                    isDebugBuild: window.SML_APP.isDebugBuild,
+                    isReleaseBuild: window.SML_APP.isReleaseBuild
                   }
                 }));
               } catch (e) {}
@@ -748,7 +663,14 @@ extension WebView {
                         bundleId: window.SML_APP.bundleId,
                         appVersion: window.SML_APP.appVersion,
                         buildNumber: window.SML_APP.buildNumber,
-                        pushEnvironment: window.SML_APP.pushEnvironment
+                        pushEnvironment: window.SML_APP.pushEnvironment,
+                        distribution: window.SML_APP.distribution,
+                        signedEnvironment: window.SML_APP.signedEnvironment,
+                        provisioningEnvironment: window.SML_APP.provisioningEnvironment,
+                        receiptEnvironment: window.SML_APP.receiptEnvironment,
+                        isTestFlight: window.SML_APP.isTestFlight,
+                        isDebugBuild: window.SML_APP.isDebugBuild,
+                        isReleaseBuild: window.SML_APP.isReleaseBuild
                       }
                     }));
                   } catch (e2) {}
@@ -761,6 +683,10 @@ extension WebView {
               window.SML_PUSH_APP_VERSION = \(appVersionJS);
               window.SML_PUSH_BUILD_NUMBER = \(buildNumberJS);
               window.SML_PUSH_ENVIRONMENT = \(pushEnvironmentJS);
+              window.SML_PUSH_DISTRIBUTION = \(distributionChannelJS);
+              window.SML_PUSH_SIGNED_ENVIRONMENT = \(signedEnvironmentJS);
+              window.SML_PUSH_PROVISIONING_ENVIRONMENT = \(provisioningEnvironmentJS);
+              window.SML_PUSH_RECEIPT_ENVIRONMENT = \(receiptEnvironmentJS);
 
               try {
                 if (!document.getElementById('sml-ios-style')) {
@@ -825,18 +751,97 @@ extension WebView {
         }
 
         private func currentPushEnvironment() -> String {
+            let context = currentPushRegistrationContext()
+            return context.environment
+        }
+
+        private func currentPushRegistrationContext() -> (environment: String, distribution: String, signedEnvironment: String, provisioningEnvironment: String, receiptEnvironment: String, isTestFlight: Bool, isDebugBuild: Bool, isReleaseBuild: Bool) {
 #if targetEnvironment(simulator)
-            return "sandbox"
+            return (
+                environment: "sandbox",
+                distribution: "simulator",
+                signedEnvironment: "sandbox",
+                provisioningEnvironment: "",
+                receiptEnvironment: "",
+                isTestFlight: false,
+                isDebugBuild: true,
+                isReleaseBuild: false
+            )
 #else
-            if let raw = embeddedPushEnvironment() {
-                return raw == "production" ? "production" : "sandbox"
-            }
+            let signedEnvironment = signedPushEnvironment()
+            let provisioningEnvironment = embeddedPushEnvironment() ?? ""
+            let isTestFlight = isTestFlightBuild()
+            let receiptEnvironment = isTestFlight ? "production" : ""
 #if DEBUG
-            return "sandbox"
+            let isDebugBuild = true
 #else
-            return "production"
+            let isDebugBuild = false
 #endif
+            let isReleaseBuild = !isDebugBuild
+
+            let distribution: String
+            if isTestFlight {
+                distribution = "testflight"
+            } else if provisioningEnvironment == "sandbox" {
+                distribution = "xcode"
+            } else if provisioningEnvironment == "production" {
+                distribution = "adhoc"
+            } else if isReleaseBuild {
+                distribution = "appstore"
+            } else {
+                distribution = "unknown"
+            }
+
+            let environment: String
+            if signedEnvironment == "production" || signedEnvironment == "sandbox" {
+                environment = signedEnvironment
+            } else if isTestFlight {
+                environment = "production"
+            } else if provisioningEnvironment == "production" || provisioningEnvironment == "sandbox" {
+                environment = provisioningEnvironment
+            } else if isDebugBuild {
+                environment = "sandbox"
+            } else {
+                environment = "production"
+            }
+
+            return (
+                environment: environment,
+                distribution: distribution,
+                signedEnvironment: signedEnvironment,
+                provisioningEnvironment: provisioningEnvironment,
+                receiptEnvironment: receiptEnvironment,
+                isTestFlight: isTestFlight,
+                isDebugBuild: isDebugBuild,
+                isReleaseBuild: isReleaseBuild
+            )
 #endif
+        }
+
+        private func signedPushEnvironment() -> String {
+            guard let task = SecTaskCreateFromSelf(nil) else {
+                return ""
+            }
+
+            guard let value = SecTaskCopyValueForEntitlement(task, "aps-environment" as CFString, nil) else {
+                return ""
+            }
+
+            let raw = (value as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if raw == "production" {
+                return "production"
+            }
+            if raw == "development" || raw == "sandbox" {
+                return "sandbox"
+            }
+            return ""
+        }
+
+        private func isTestFlightBuild() -> Bool {
+            guard let receiptURL = Bundle.main.appStoreReceiptURL else {
+                return false
+            }
+            return receiptURL.lastPathComponent == "sandboxReceipt"
         }
 
         private func embeddedPushEnvironment() -> String? {
@@ -881,7 +886,6 @@ extension WebView {
 
         private func injectBiometricUIIfNeeded(webView: WKWebView) {
             tryInjectIntoPage(webView: webView, force: true)
-            refreshNativeFaceIDButton(webView: webView)
         }
 
         private func maybePersistPendingLoginAfterSuccessfulNavigation(webView: WKWebView) {
@@ -901,7 +905,6 @@ extension WebView {
                 DispatchQueue.main.async {
                     PushState.shared.refreshBiometricState()
                 }
-                refreshNativeFaceIDButton(webView: webView)
                 return
             }
 
@@ -936,9 +939,6 @@ extension WebView {
                 DispatchQueue.main.async {
                     PushState.shared.setBiometricEnabled(true)
                     PushState.shared.refreshBiometricState()
-                }
-                if let webView = self.attachedWebView {
-                    self.refreshNativeFaceIDButton(webView: webView)
                 }
             })
 
