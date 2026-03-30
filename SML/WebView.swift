@@ -682,12 +682,53 @@ extension WebView {
 #if targetEnvironment(simulator)
             return "sandbox"
 #else
+            if let raw = embeddedPushEnvironment() {
+                return raw == "production" ? "production" : "sandbox"
+            }
 #if DEBUG
             return "sandbox"
 #else
             return "production"
 #endif
 #endif
+        }
+
+        private func embeddedPushEnvironment() -> String? {
+            guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") else {
+                return nil
+            }
+            guard let data = try? Data(contentsOf: url), let content = String(data: data, encoding: .ascii) else {
+                return nil
+            }
+
+            let startTag = "<plist"
+            let endTag = "</plist>"
+            guard let startRange = content.range(of: startTag), let endRange = content.range(of: endTag) else {
+                return nil
+            }
+
+            let plistText = String(content[startRange.lowerBound..<endRange.upperBound])
+            guard let plistData = plistText.data(using: .utf8) else {
+                return nil
+            }
+
+            guard
+                let object = try? PropertyListSerialization.propertyList(from: plistData, options: [], format: nil),
+                let root = object as? [String: Any],
+                let entitlements = root["Entitlements"] as? [String: Any],
+                let value = entitlements["aps-environment"] as? String
+            else {
+                return nil
+            }
+
+            let raw = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if raw == "production" {
+                return "production"
+            }
+            if raw == "development" || raw == "sandbox" {
+                return "sandbox"
+            }
+            return nil
         }
 
         private func injectBiometricUIIfNeeded(webView: WKWebView) {
