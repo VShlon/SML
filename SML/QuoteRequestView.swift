@@ -6,11 +6,10 @@
 //  Author: Nuvren.com
 //
 //  Purpose:
-//  - Request tab content: opens the account New Request form for logged-in
-//    clients, or the Contact page for guests.
+//  - Request tab content: opens the New Request form for all users (guest and client).
 //  - Uses the shared WKWebView session so the user is already authenticated.
 //  - Satisfies Apple Guideline 4.2.2: the page is a fully interactive
-//    account-based form, not a static marketing page.
+//    quote-request form, not a static marketing page.
 //
 
 import SwiftUI
@@ -19,8 +18,7 @@ struct QuoteRequestView: View {
 
     @StateObject private var push = PushState.shared
 
-    private let newRequestURL  = URL(string: "https://stmaryslandscaping.ca/new-request/")!
-    private let contactURL     = URL(string: "https://stmaryslandscaping.ca/contact/")!
+    private let newRequestURL = URL(string: "https://stmaryslandscaping.ca/new-request/")!
 
     var body: some View {
         WebView(
