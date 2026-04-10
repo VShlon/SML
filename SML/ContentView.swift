@@ -160,10 +160,17 @@ struct ContentView: View {
     // MARK: - Политика сброса
 
     private func shouldResetOnSelect(tab: Tab, mode: RoleState.Mode) -> Bool {
+        if tab == .center && (mode == .guest || mode == .client) {
+            return false
+        }
         return true
     }
 
     private func shouldResetOnReselect(tab: Tab, mode: RoleState.Mode) -> Bool {
+        if (mode == .guest || mode == .client), tab == .center {
+            return false
+        }
+
         if mode == .worker, tab == .left2 {
             return false
         }
@@ -177,16 +184,11 @@ struct ContentView: View {
 
     // MARK: - Модель вкладок
 
-    private enum TabContent {
-        case web(url: String)
-        case request
-    }
-
     private struct TabSpec {
         let tab: Tab
         let systemImage: String
         let isCenter: Bool
-        let content: TabContent
+        let url: String
         let token: UUID
         let command: WebNavigationCommand?
     }
@@ -200,7 +202,7 @@ struct ContentView: View {
                     tab: .left1,
                     systemImage: "house",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/"),
+                    url: "https://stmaryslandscaping.ca/",
                     token: left1Token,
                     command: left1Command
                 ),
@@ -208,7 +210,7 @@ struct ContentView: View {
                     tab: .left2,
                     systemImage: "leaf",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/services/"),
+                    url: "https://stmaryslandscaping.ca/services/",
                     token: left2Token,
                     command: left2Command
                 ),
@@ -216,15 +218,15 @@ struct ContentView: View {
                     tab: .center,
                     systemImage: "paperplane",
                     isCenter: true,
-                    content: .request,
+                    url: "https://stmaryslandscaping.ca/new-request/",
                     token: centerToken,
-                    command: nil
+                    command: centerCommand
                 ),
                 .init(
                     tab: .right1,
                     systemImage: "square.grid.2x2",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/projects/"),
+                    url: "https://stmaryslandscaping.ca/projects/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -236,15 +238,15 @@ struct ContentView: View {
                     tab: .left1,
                     systemImage: "house",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/"),
+                    url: "https://stmaryslandscaping.ca/",
                     token: left1Token,
                     command: left1Command
                 ),
                 .init(
                     tab: .left2,
-                    systemImage: "leaf",
+                    systemImage: "list.bullet.clipboard",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/services/"),
+                    url: "https://stmaryslandscaping.ca/my-requests/",
                     token: left2Token,
                     command: left2Command
                 ),
@@ -252,15 +254,15 @@ struct ContentView: View {
                     tab: .center,
                     systemImage: "paperplane",
                     isCenter: true,
-                    content: .request,
+                    url: "https://stmaryslandscaping.ca/new-request/",
                     token: centerToken,
-                    command: nil
+                    command: centerCommand
                 ),
                 .init(
                     tab: .right1,
-                    systemImage: "square.grid.2x2",
+                    systemImage: "person.crop.circle",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/projects/"),
+                    url: "https://stmaryslandscaping.ca/account/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -272,7 +274,7 @@ struct ContentView: View {
                     tab: .left1,
                     systemImage: "house",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/"),
+                    url: "https://stmaryslandscaping.ca/",
                     token: left1Token,
                     command: left1Command
                 ),
@@ -280,7 +282,7 @@ struct ContentView: View {
                     tab: .left2,
                     systemImage: "calendar",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/account-workday/"),
+                    url: "https://stmaryslandscaping.ca/account-workday/",
                     token: left2Token,
                     command: left2Command
                 ),
@@ -288,7 +290,7 @@ struct ContentView: View {
                     tab: .center,
                     systemImage: "checklist",
                     isCenter: true,
-                    content: .web(url: "https://stmaryslandscaping.ca/tasks-today/"),
+                    url: "https://stmaryslandscaping.ca/tasks-today/",
                     token: centerToken,
                     command: centerCommand
                 ),
@@ -296,7 +298,7 @@ struct ContentView: View {
                     tab: .right1,
                     systemImage: "exclamationmark.bubble",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/account-report/"),
+                    url: "https://stmaryslandscaping.ca/account-report/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -308,7 +310,7 @@ struct ContentView: View {
                     tab: .left1,
                     systemImage: "house",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/"),
+                    url: "https://stmaryslandscaping.ca/",
                     token: left1Token,
                     command: left1Command
                 ),
@@ -316,7 +318,7 @@ struct ContentView: View {
                     tab: .left2,
                     systemImage: "calendar.badge.clock",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/monthly-billing/"),
+                    url: "https://stmaryslandscaping.ca/monthly-billing/",
                     token: left2Token,
                     command: left2Command
                 ),
@@ -324,7 +326,7 @@ struct ContentView: View {
                     tab: .center,
                     systemImage: "briefcase",
                     isCenter: true,
-                    content: .web(url: "https://stmaryslandscaping.ca/account-workday/"),
+                    url: "https://stmaryslandscaping.ca/account-workday/",
                     token: centerToken,
                     command: centerCommand
                 ),
@@ -332,7 +334,7 @@ struct ContentView: View {
                     tab: .right1,
                     systemImage: "dollarsign.square",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/payroll-review/"),
+                    url: "https://stmaryslandscaping.ca/payroll-review/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -344,7 +346,7 @@ struct ContentView: View {
                     tab: .left1,
                     systemImage: "house",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/"),
+                    url: "https://stmaryslandscaping.ca/",
                     token: left1Token,
                     command: left1Command
                 ),
@@ -352,7 +354,7 @@ struct ContentView: View {
                     tab: .left2,
                     systemImage: "plus.square",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/create-task/"),
+                    url: "https://stmaryslandscaping.ca/create-task/",
                     token: left2Token,
                     command: left2Command
                 ),
@@ -360,7 +362,7 @@ struct ContentView: View {
                     tab: .center,
                     systemImage: "rectangle.3.group",
                     isCenter: true,
-                    content: .web(url: "https://stmaryslandscaping.ca/workspace/"),
+                    url: "https://stmaryslandscaping.ca/workspace/",
                     token: centerToken,
                     command: centerCommand
                 ),
@@ -368,7 +370,7 @@ struct ContentView: View {
                     tab: .right1,
                     systemImage: "tray.full",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/all-tasks/"),
+                    url: "https://stmaryslandscaping.ca/all-tasks/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -380,7 +382,7 @@ struct ContentView: View {
                     tab: .left1,
                     systemImage: "house",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/"),
+                    url: "https://stmaryslandscaping.ca/",
                     token: left1Token,
                     command: left1Command
                 ),
@@ -388,7 +390,7 @@ struct ContentView: View {
                     tab: .left2,
                     systemImage: "plus.square",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/create-task/"),
+                    url: "https://stmaryslandscaping.ca/create-task/",
                     token: left2Token,
                     command: left2Command
                 ),
@@ -396,7 +398,7 @@ struct ContentView: View {
                     tab: .center,
                     systemImage: "rectangle.3.group",
                     isCenter: true,
-                    content: .web(url: "https://stmaryslandscaping.ca/workspace/"),
+                    url: "https://stmaryslandscaping.ca/workspace/",
                     token: centerToken,
                     command: centerCommand
                 ),
@@ -404,7 +406,7 @@ struct ContentView: View {
                     tab: .right1,
                     systemImage: "tray.full",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/all-tasks/"),
+                    url: "https://stmaryslandscaping.ca/all-tasks/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -416,7 +418,7 @@ struct ContentView: View {
                     tab: .left1,
                     systemImage: "house",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/"),
+                    url: "https://stmaryslandscaping.ca/",
                     token: left1Token,
                     command: left1Command
                 ),
@@ -424,7 +426,7 @@ struct ContentView: View {
                     tab: .left2,
                     systemImage: "plus.square",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/create-task/"),
+                    url: "https://stmaryslandscaping.ca/create-task/",
                     token: left2Token,
                     command: left2Command
                 ),
@@ -432,7 +434,7 @@ struct ContentView: View {
                     tab: .center,
                     systemImage: "briefcase",
                     isCenter: true,
-                    content: .web(url: "https://stmaryslandscaping.ca/account-workday/"),
+                    url: "https://stmaryslandscaping.ca/account-workday/",
                     token: centerToken,
                     command: centerCommand
                 ),
@@ -440,7 +442,7 @@ struct ContentView: View {
                     tab: .right1,
                     systemImage: "tray.full",
                     isCenter: false,
-                    content: .web(url: "https://stmaryslandscaping.ca/all-tasks/"),
+                    url: "https://stmaryslandscaping.ca/all-tasks/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -452,20 +454,15 @@ struct ContentView: View {
 
     @ViewBuilder
     private func tabBody(_ spec: TabSpec) -> some View {
-        switch spec.content {
-        case .web(let url):
-            WebView(
-                url: URL(string: url)!,
-                apnsToken: push.apnsToken,
-                deviceId: push.deviceId,
-                biometricEnabled: push.biometricEnabled,
-                hasBiometricLogin: push.hasBiometricLogin,
-                command: spec.command
-            )
-            .id(spec.token)
-        case .request:
-            QuoteRequestView()
-        }
+        WebView(
+            url: URL(string: spec.url)!,
+            apnsToken: push.apnsToken,
+            deviceId: push.deviceId,
+            biometricEnabled: push.biometricEnabled,
+            hasBiometricLogin: push.hasBiometricLogin,
+            command: spec.command
+        )
+        .id(spec.token)
     }
 
     // MARK: - Иконки вкладок
@@ -633,10 +630,23 @@ struct ContentView: View {
         let path = url.path.lowercased()
 
         switch mode {
-        case .guest, .client:
+        case .guest:
             if path.contains("/services") {
                 return .left2
+            } else if path.contains("/new-request") {
+                return .center
             } else if path.contains("/projects") {
+                return .right1
+            } else {
+                return .left1
+            }
+
+        case .client:
+            if path.contains("/my-requests") {
+                return .left2
+            } else if path.contains("/new-request") {
+                return .center
+            } else if path.contains("/account") {
                 return .right1
             } else {
                 return .left1
