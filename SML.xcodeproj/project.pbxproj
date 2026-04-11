@@ -18,6 +18,7 @@
 		D5A7A2182F64B0BA00BC6815 /* MoreRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7A2172F64B0BA00BC6815 /* MoreRootView.swift */; };
 		D5A7A21A2F64B0D100BC6815 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7A2192F64B0D100BC6815 /* AppDelegate.swift */; };
 		D5A7A21C2F64B0F700BC6815 /* Launch Screen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = D5A7A21B2F64B0F700BC6815 /* Launch Screen.storyboard */; };
+		D5D844872F89D62E006E3B11 /* LocationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5D844862F89D62E006E3B11 /* LocationBridge.swift */; };
 		D5DCC5492F85F6900071FD65 /* QuoteRequestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5DCC5482F85F6900071FD65 /* QuoteRequestView.swift */; };
 /* End PBXBuildFile section */
 
@@ -36,6 +37,7 @@
 		D5A7A21B2F64B0F700BC6815 /* Launch Screen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = "Launch Screen.storyboard"; sourceTree = "<group>"; };
 		D5BA7C412F64C52300E09798 /* SML.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SML.entitlements; sourceTree = "<group>"; };
 		D5BA7C422F64C52E00E09798 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		D5D844862F89D62E006E3B11 /* LocationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationBridge.swift; sourceTree = "<group>"; };
 		D5DCC5482F85F6900071FD65 /* QuoteRequestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteRequestView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -78,6 +80,7 @@
 				D5A7A2132F64B07100BC6815 /* PushState.swift */,
 				D591D1742F64B7F1003A8934 /* RoleState.swift */,
 				D5A7A2152F64B0A200BC6815 /* NotificationsView.swift */,
+				D5D844862F89D62E006E3B11 /* LocationBridge.swift */,
 				D5A7A2172F64B0BA00BC6815 /* MoreRootView.swift */,
 				D5A7A2192F64B0D100BC6815 /* AppDelegate.swift */,
 				D5DCC5482F85F6900071FD65 /* QuoteRequestView.swift */,
@@ -171,6 +174,7 @@
 				D5A7A2162F64B0A200BC6815 /* NotificationsView.swift in Sources */,
 				D5A7A2062F64AF2A00BC6815 /* ContentView.swift in Sources */,
 				D5A7A21A2F64B0D100BC6815 /* AppDelegate.swift in Sources */,
+				D5D844872F89D62E006E3B11 /* LocationBridge.swift in Sources */,
 				D5DCC5492F85F6900071FD65 /* QuoteRequestView.swift in Sources */,
 				D591D1752F64B7F1003A8934 /* RoleState.swift in Sources */,
 				D5A7A2042F64AF2A00BC6815 /* SMLApp.swift in Sources */,

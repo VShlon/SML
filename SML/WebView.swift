@@ -210,6 +210,21 @@ extension WebView {
         weak var attachedWebView: WKWebView?
         weak var hostViewController: WebViewController?
 
+        // Location bridge -- активен только пока открыта страница account-workday
+        private var isWatchingLocation: Bool = false
+        private weak var locationWebView: WKWebView?
+
+        deinit {
+            if isWatchingLocation {
+                NotificationCenter.default.removeObserver(
+                    self,
+                    name: LocationBridge.didUpdateNotification,
+                    object: nil
+                )
+                LocationBridge.shared.stopWatching()
+            }
+        }
+
         private var lastCookieSyncAt: TimeInterval = 0
         private let cookieSyncMinInterval: TimeInterval = 1.0
 
@@ -473,6 +488,7 @@ extension WebView {
                 self.syncCookiesToSharedStorage(webView: webView)
                 self.requestWhoamiViaWebView(webView: webView)
                 self.maybePersistPendingLoginAfterSuccessfulNavigation(webView: webView)
+                self.handleLocationTracking(webView: webView)
             }
         }
 
@@ -1145,6 +1161,64 @@ extension WebView {
             l?.fragment = nil
             r?.fragment = nil
             return l?.string == r?.string
+        }
+
+        // MARK: - Location Tracking
+
+        // Назначение:
+        // - Включает нативный location tracking на странице account-workday.
+        // - Отписывается и останавливает слежку при уходе со страницы.
+        private func handleLocationTracking(webView: WKWebView) {
+            let path = webView.url?.path ?? ""
+            let onWorkdayPage = path.lowercased().contains("account-workday")
+
+            if onWorkdayPage {
+                locationWebView = webView
+                if !isWatchingLocation {
+                    isWatchingLocation = true
+                    NotificationCenter.default.addObserver(
+                        self,
+                        selector: #selector(onLocationUpdate),
+                        name: LocationBridge.didUpdateNotification,
+                        object: nil
+                    )
+                }
+                LocationBridge.shared.startWatching()
+                injectLocation(into: webView)
+            } else {
+                if isWatchingLocation {
+                    isWatchingLocation = false
+                    NotificationCenter.default.removeObserver(
+                        self,
+                        name: LocationBridge.didUpdateNotification,
+                        object: nil
+                    )
+                    locationWebView = nil
+                    LocationBridge.shared.stopWatching()
+                }
+            }
+        }
+
+        // Назначение:
+        // - Вызывается NotificationCenter при обновлении координат или смене разрешения.
+        @objc private func onLocationUpdate() {
+            guard let wv = locationWebView else { return }
+            injectLocation(into: wv)
+        }
+
+        // Назначение:
+        // - Инжектирует window.SML_APP.location с актуальными координатами.
+        private func injectLocation(into webView: WKWebView) {
+            let payload = LocationBridge.shared.jsPayload
+            let js = """
+            (function(){
+              try {
+                window.SML_APP = window.SML_APP || {};
+                window.SML_APP.location = \(payload);
+              } catch(e) {}
+            })();
+            """
+            webView.evaluateJavaScript(js, completionHandler: nil)
         }
 
         // Назначение:
