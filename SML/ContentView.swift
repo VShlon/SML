@@ -380,9 +380,9 @@ struct ContentView: View {
             return [
                 .init(
                     tab: .left1,
-                    systemImage: "house",
+                    systemImage: "person.crop.circle",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/",
+                    url: "https://stmaryslandscaping.ca/account/",
                     token: left1Token,
                     command: left1Command
                 ),
@@ -396,9 +396,9 @@ struct ContentView: View {
                 ),
                 .init(
                     tab: .center,
-                    systemImage: "rectangle.3.group",
+                    systemImage: "briefcase",
                     isCenter: true,
-                    url: "https://stmaryslandscaping.ca/workspace/",
+                    url: "https://stmaryslandscaping.ca/account-workday/",
                     token: centerToken,
                     command: centerCommand
                 ),
@@ -688,7 +688,7 @@ struct ContentView: View {
         case .owner:
             if path.contains("/create-task") {
                 return .left2
-            } else if path.contains("/workspace") {
+            } else if path.contains("/account-workday") || path.contains("/workday") {
                 return .center
             } else if path.contains("/all-tasks") {
                 return .right1
