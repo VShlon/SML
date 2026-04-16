@@ -23,5 +23,9 @@
     <string>Face ID is used to sign in to your St. Marys Landscaping account inside the app.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Your location is checked to verify you are at the shop before starting or ending your workday.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Choose photos from your library to attach to your service request.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Take a photo to attach to your service request.</string>
 </dict>
 </plist>

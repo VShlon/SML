@@ -208,9 +208,9 @@ struct ContentView: View {
                 ),
                 .init(
                     tab: .left2,
-                    systemImage: "leaf",
+                    systemImage: "person",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/services/",
+                    url: "https://stmaryslandscaping.ca/account/",
                     token: left2Token,
                     command: left2Command
                 ),
@@ -224,9 +224,9 @@ struct ContentView: View {
                 ),
                 .init(
                     tab: .right1,
-                    systemImage: "square.grid.2x2",
+                    systemImage: "leaf",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/projects/",
+                    url: "https://stmaryslandscaping.ca/services/",
                     token: right1Token,
                     command: right1Command
                 ),
