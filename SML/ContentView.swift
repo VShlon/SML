@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  SML
 //
-//  Version: 1.0.0
+//  Version: 1.0.1
 //  Author: Nuvren.com
 //
 //  Назначение:
@@ -94,6 +94,10 @@ struct ContentView: View {
             applyTabBarAppearance()
         }
         .onChange(of: roleState.mode) { oldMode, newMode in
+            // Skip if mode hasn't actually changed — RoleState guards this too,
+            // but belt-and-suspenders prevents tab resets during fast navigation.
+            guard oldMode != newMode else { return }
+
             applyTabBarAppearance()
 
             let fallback = tabForRoleTransition(from: oldMode, to: newMode, current: lastNonMoreTab)
@@ -122,6 +126,9 @@ struct ContentView: View {
             if shouldResetOnSelect(tab: newTab, mode: roleState.mode) {
                 resetTabToRoot(newTab)
             }
+        }
+        .onOpenURL { url in
+            routeFromWidget(url, mode: roleState.mode)
         }
         .onReceive(push.$openCommand) { cmd in
             guard let cmd else { return }
@@ -208,25 +215,25 @@ struct ContentView: View {
                 ),
                 .init(
                     tab: .left2,
-                    systemImage: "leaf",
+                    systemImage: "person",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/services/",
+                    url: "https://stmaryslandscaping.ca/account/",
                     token: left2Token,
                     command: left2Command
                 ),
                 .init(
                     tab: .center,
-                    systemImage: "phone",
+                    systemImage: "paperplane",
                     isCenter: true,
-                    url: "https://stmaryslandscaping.ca/contact/",
+                    url: "https://stmaryslandscaping.ca/new-request/",
                     token: centerToken,
                     command: centerCommand
                 ),
                 .init(
                     tab: .right1,
-                    systemImage: "square.grid.2x2",
+                    systemImage: "leaf",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/projects/",
+                    url: "https://stmaryslandscaping.ca/services/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -244,25 +251,25 @@ struct ContentView: View {
                 ),
                 .init(
                     tab: .left2,
-                    systemImage: "leaf",
+                    systemImage: "list.bullet.clipboard",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/services/",
+                    url: "https://stmaryslandscaping.ca/my-requests/",
                     token: left2Token,
                     command: left2Command
                 ),
                 .init(
                     tab: .center,
-                    systemImage: "phone",
+                    systemImage: "paperplane",
                     isCenter: true,
-                    url: "https://stmaryslandscaping.ca/contact/",
+                    url: "https://stmaryslandscaping.ca/new-request/",
                     token: centerToken,
                     command: centerCommand
                 ),
                 .init(
                     tab: .right1,
-                    systemImage: "square.grid.2x2",
+                    systemImage: "person.crop.circle",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/projects/",
+                    url: "https://stmaryslandscaping.ca/account/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -380,9 +387,9 @@ struct ContentView: View {
             return [
                 .init(
                     tab: .left1,
-                    systemImage: "house",
+                    systemImage: "person.crop.circle",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/",
+                    url: "https://stmaryslandscaping.ca/account/",
                     token: left1Token,
                     command: left1Command
                 ),
@@ -396,9 +403,9 @@ struct ContentView: View {
                 ),
                 .init(
                     tab: .center,
-                    systemImage: "rectangle.3.group",
+                    systemImage: "briefcase",
                     isCenter: true,
-                    url: "https://stmaryslandscaping.ca/workspace/",
+                    url: "https://stmaryslandscaping.ca/account-workday/",
                     token: centerToken,
                     command: centerCommand
                 ),
@@ -603,17 +610,33 @@ struct ContentView: View {
     }
 
     private func tabForRoleTransition(from oldMode: RoleState.Mode, to newMode: RoleState.Mode, current: Tab) -> Tab {
+        // Login: guest -> authenticated role - open the main account page for the role
+        if oldMode == .guest && newMode != .guest {
+            return defaultTabForRole(newMode)
+        }
+        // Logout: any -> guest - go home
+        if oldMode != .guest && newMode == .guest {
+            return .left1
+        }
+        // Role switch while already logged in - keep current tab
         switch current {
-        case .left1:
-            return .left1
-        case .left2:
-            return .left2
-        case .center:
-            return .center
-        case .right1:
-            return .right1
-        case .right2:
-            return .left1
+        case .left1:  return .left1
+        case .left2:  return .left2
+        case .center: return .center
+        case .right1: return .right1
+        case .right2: return .left1
+        }
+    }
+
+    private func defaultTabForRole(_ mode: RoleState.Mode) -> Tab {
+        switch mode {
+        case .worker:     return .center  // Tasks Today
+        case .client:     return .right1  // Account
+        case .accountant: return .center  // Workday
+        case .admin:      return .center  // Workspace
+        case .owner:      return .left1   // Account
+        case .menager:    return .center  // Workday
+        case .guest:      return .left1
         }
     }
 
@@ -630,12 +653,23 @@ struct ContentView: View {
         let path = url.path.lowercased()
 
         switch mode {
-        case .guest, .client:
+        case .guest:
             if path.contains("/services") {
                 return .left2
-            } else if path.contains("/contact") {
+            } else if path.contains("/new-request") {
                 return .center
             } else if path.contains("/projects") {
+                return .right1
+            } else {
+                return .left1
+            }
+
+        case .client:
+            if path.contains("/my-requests") {
+                return .left2
+            } else if path.contains("/new-request") {
+                return .center
+            } else if path.contains("/account") {
                 return .right1
             } else {
                 return .left1
@@ -677,7 +711,7 @@ struct ContentView: View {
         case .owner:
             if path.contains("/create-task") {
                 return .left2
-            } else if path.contains("/workspace") {
+            } else if path.contains("/account-workday") || path.contains("/workday") {
                 return .center
             } else if path.contains("/all-tasks") {
                 return .right1
@@ -695,6 +729,91 @@ struct ContentView: View {
             } else {
                 return .left1
             }
+        }
+    }
+
+    // MARK: - Widget deep link routing
+
+    private func routeFromWidget(_ url: URL, mode: RoleState.Mode) {
+        guard url.scheme == "sml" else { return }
+
+        let target = widgetTab(for: url.host ?? "", mode: mode)
+
+        if showMoreSheet { showMoreSheet = false }
+        suppressReloadOnce = true
+        selected = target
+        lastNonMoreTab = target
+    }
+
+    // Direct mapping: sml:// host -> Tab per role layout.
+    //
+    // worker:     left1=home  left2=workday   center=tasks-today  right1=report
+    // accountant: left1=home  left2=billing   center=workday      right1=payroll
+    // admin:      left1=home  left2=create    center=workspace    right1=all-tasks
+    // owner:      left1=acct  left2=create    center=workday      right1=all-tasks
+    // menager:    left1=home  left2=create    center=workday      right1=all-tasks
+    // client:     left1=home  left2=requests  center=quote        right1=account
+    // guest:      left1=home  left2=account   center=quote        right1=services
+    private func widgetTab(for host: String, mode: RoleState.Mode) -> Tab {
+        switch host {
+        case "home":
+            return .left1
+
+        case "tasks-today":
+            return mode == .worker ? .center : .left1
+
+        case "workday":
+            switch mode {
+            case .worker:                        return .left2
+            case .accountant, .owner, .menager:  return .center
+            default:                             return .left1
+            }
+
+        case "workspace":
+            return mode == .admin ? .center : .left1
+
+        case "all-tasks":
+            switch mode {
+            case .admin, .owner, .menager: return .right1
+            default:                       return .left1
+            }
+
+        case "create":
+            switch mode {
+            case .admin, .owner, .menager: return .left2
+            default:                       return .left1
+            }
+
+        case "billing":
+            return mode == .accountant ? .left2 : .left1
+
+        case "payroll":
+            return mode == .accountant ? .right1 : .left1
+
+        case "report":
+            return mode == .worker ? .right1 : .left1
+
+        case "requests":
+            return mode == .client ? .left2 : .left1
+
+        case "account":
+            switch mode {
+            case .client:  return .right1
+            case .owner:   return .left1
+            default:       return .left1
+            }
+
+        case "quote":
+            switch mode {
+            case .guest, .client: return .center
+            default:              return .left1
+            }
+
+        case "services":
+            return mode == .guest ? .right1 : .left1
+
+        default:
+            return .left1
         }
     }
 

@@ -2,7 +2,7 @@
 //  RoleState.swift
 //  SML
 //
-//  Version: 1.0.0
+//  Version: 1.0.1
 //  Author: Nuvren.com
 //
 //  Назначение:
@@ -42,6 +42,8 @@ final class RoleState: ObservableObject {
     private var isLoading: Bool = false
     private var lastRefreshAt: TimeInterval = 0
     private let minRefreshInterval: TimeInterval = 0.6
+    private var lastBridgeAt: TimeInterval = 0
+    private let minBridgeInterval: TimeInterval = 0.4
 
     private lazy var session: URLSession = {
         let cfg = URLSessionConfiguration.default
@@ -58,6 +60,9 @@ final class RoleState: ObservableObject {
     }
 
     func setRoleFromBridge(role raw: String?) {
+        let now = Date().timeIntervalSince1970
+        guard now - lastBridgeAt >= minBridgeInterval else { return }
+        lastBridgeAt = now
         lastError = nil
         resolveAndApply(from: [
             "role": raw ?? ""
@@ -65,6 +70,9 @@ final class RoleState: ObservableObject {
     }
 
     func setRoleFromBridge(payload: [String: Any]) {
+        let now = Date().timeIntervalSince1970
+        guard now - lastBridgeAt >= minBridgeInterval else { return }
+        lastBridgeAt = now
         lastError = nil
         resolveAndApply(from: payload)
     }
@@ -364,15 +372,22 @@ final class RoleState: ObservableObject {
     }
 
     private func applyAuthorized(mode newMode: Mode, wpRole newRole: String) {
+        // Guard: don't publish if nothing changed — prevents spurious onChange in ContentView
+        // that would reset tabs and override the user's in-flight navigation tap.
+        guard newMode != mode || newRole != wpRole else { return }
         mode = newMode
         wpRole = newRole
         persistAuthorized(mode: newMode, wpRole: newRole)
+        smlWidgetWrite(role: newRole, taskCount: 0, nextTaskTitle: "")
     }
 
     private func applyGuest(clearPersisted: Bool) {
-        mode = .guest
-        wpRole = "guest"
-
+        let alreadyGuest = mode == .guest
+        if !alreadyGuest {
+            mode = .guest
+            wpRole = "guest"
+            smlWidgetWrite(role: "guest", taskCount: 0, nextTaskTitle: "")
+        }
         if clearPersisted {
             clearPersistedAuthorizedRole()
         }
@@ -431,16 +446,17 @@ final class RoleState: ObservableObject {
     }
 
     private func restorePersistedAuthorizedRoleIfNeeded() {
-        guard mode == .guest else {
-            return
-        }
+        guard mode == .guest else { return }
+        guard let persisted = persistedAuthorizedMode() else { return }
 
-        guard let persisted = persistedAuthorizedMode() else {
-            return
-        }
+        let restoredRole = UserDefaults.standard.string(forKey: storedRoleKey) ?? wpRoleForMode(persisted)
+        mode   = persisted
+        wpRole = restoredRole
 
-        mode = persisted
-        wpRole = UserDefaults.standard.string(forKey: storedRoleKey) ?? wpRoleForMode(persisted)
+        // Sync widget so it shows the correct role immediately without waiting
+        // for the JS bridge — the guard in applyAuthorized would skip this write
+        // since mode already equals persisted at that point.
+        smlWidgetWrite(role: restoredRole, taskCount: 0, nextTaskTitle: "")
     }
 
     private func persistedAuthorizedMode() -> Mode? {
