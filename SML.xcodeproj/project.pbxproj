@@ -11,8 +11,6 @@
 		383E2664D42C86098F069013 /* SMLWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FE2C00576976AEC8DC12AC4 /* SMLWidgetShared.swift */; };
 		735F5826193184C858EBD47A /* SMLWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0F2883B09BCE5C9B43166B9A /* SMLWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		807B62334C0FE02A0B59CF41 /* SMLWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 574D6F02BA1AF5C70E5F8DDA /* SMLWidget.swift */; };
-		946424C627A8942569221B23 /* QuoteRequestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6922B270127571407D7D5599 /* QuoteRequestView.swift */; };
-		AE0CAE18E16F23E4502A317E /* LocationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E112343CE736391DA0AD3C27 /* LocationBridge.swift */; };
 		B4BE104C5AFFCEDCC121645C /* SMLWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FE2C00576976AEC8DC12AC4 /* SMLWidgetShared.swift */; };
 		C9778975230A187C7DC92FFE /* SMLWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C990C272E3E79C40B39A3CE /* SMLWidgetBundle.swift */; };
 		D591D1752F64B7F1003A8934 /* RoleState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D591D1742F64B7F1003A8934 /* RoleState.swift */; };
@@ -27,6 +25,8 @@
 		D5A7A2182F64B0BA00BC6815 /* MoreRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7A2172F64B0BA00BC6815 /* MoreRootView.swift */; };
 		D5A7A21A2F64B0D100BC6815 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7A2192F64B0D100BC6815 /* AppDelegate.swift */; };
 		D5A7A21C2F64B0F700BC6815 /* Launch Screen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = D5A7A21B2F64B0F700BC6815 /* Launch Screen.storyboard */; };
+		D5D844872F89D62E006E3B11 /* LocationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5D844862F89D62E006E3B11 /* LocationBridge.swift */; };
+		D5DCC5492F85F6900071FD65 /* QuoteRequestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5DCC5482F85F6900071FD65 /* QuoteRequestView.swift */; };
 		E2758474238049926B2DE518 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F8682DD32D90E119B9FDB122 /* SwiftUI.framework */; };
 		F4264A0F34A5185FA539BC40 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E445B850E1CED029E85D300E /* Foundation.framework */; };
 /* End PBXBuildFile section */
@@ -61,7 +61,6 @@
 		4C990C272E3E79C40B39A3CE /* SMLWidgetBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMLWidgetBundle.swift; sourceTree = "<group>"; };
 		4FE2C00576976AEC8DC12AC4 /* SMLWidgetShared.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMLWidgetShared.swift; sourceTree = "<group>"; };
 		574D6F02BA1AF5C70E5F8DDA /* SMLWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMLWidget.swift; sourceTree = "<group>"; };
-		6922B270127571407D7D5599 /* QuoteRequestView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuoteRequestView.swift; sourceTree = "<group>"; };
 		7E1E4A014B65F5B2582BF6FC /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		D591D1742F64B7F1003A8934 /* RoleState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoleState.swift; sourceTree = "<group>"; };
 		D5A7A2002F64AF2A00BC6815 /* SML.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SML.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -77,7 +76,8 @@
 		D5A7A21B2F64B0F700BC6815 /* Launch Screen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = "Launch Screen.storyboard"; sourceTree = "<group>"; };
 		D5BA7C412F64C52300E09798 /* SML.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SML.entitlements; sourceTree = "<group>"; };
 		D5BA7C422F64C52E00E09798 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		E112343CE736391DA0AD3C27 /* LocationBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocationBridge.swift; sourceTree = "<group>"; };
+		D5D844862F89D62E006E3B11 /* LocationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationBridge.swift; sourceTree = "<group>"; };
+		D5DCC5482F85F6900071FD65 /* QuoteRequestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteRequestView.swift; sourceTree = "<group>"; };
 		E445B850E1CED029E85D300E /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		F8682DD32D90E119B9FDB122 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -163,13 +163,13 @@
 				D5A7A2132F64B07100BC6815 /* PushState.swift */,
 				D591D1742F64B7F1003A8934 /* RoleState.swift */,
 				D5A7A2152F64B0A200BC6815 /* NotificationsView.swift */,
+				D5D844862F89D62E006E3B11 /* LocationBridge.swift */,
 				D5A7A2172F64B0BA00BC6815 /* MoreRootView.swift */,
 				D5A7A2192F64B0D100BC6815 /* AppDelegate.swift */,
+				D5DCC5482F85F6900071FD65 /* QuoteRequestView.swift */,
 				D5A7A2072F64AF2E00BC6815 /* Assets.xcassets */,
 				D5A7A2092F64AF2E00BC6815 /* Preview Content */,
 				4FE2C00576976AEC8DC12AC4 /* SMLWidgetShared.swift */,
-				E112343CE736391DA0AD3C27 /* LocationBridge.swift */,
-				6922B270127571407D7D5599 /* QuoteRequestView.swift */,
 			);
 			path = SML;
 			sourceTree = "<group>";
@@ -296,12 +296,12 @@
 				D5A7A2162F64B0A200BC6815 /* NotificationsView.swift in Sources */,
 				D5A7A2062F64AF2A00BC6815 /* ContentView.swift in Sources */,
 				D5A7A21A2F64B0D100BC6815 /* AppDelegate.swift in Sources */,
+				D5D844872F89D62E006E3B11 /* LocationBridge.swift in Sources */,
+				D5DCC5492F85F6900071FD65 /* QuoteRequestView.swift in Sources */,
 				D591D1752F64B7F1003A8934 /* RoleState.swift in Sources */,
 				D5A7A2042F64AF2A00BC6815 /* SMLApp.swift in Sources */,
 				D5A7A2142F64B07100BC6815 /* PushState.swift in Sources */,
 				B4BE104C5AFFCEDCC121645C /* SMLWidgetShared.swift in Sources */,
-				AE0CAE18E16F23E4502A317E /* LocationBridge.swift in Sources */,
-				946424C627A8942569221B23 /* QuoteRequestView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
