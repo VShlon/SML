@@ -11,20 +11,15 @@
 		383E2664D42C86098F069013 /* SMLWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FE2C00576976AEC8DC12AC4 /* SMLWidgetShared.swift */; };
 		735F5826193184C858EBD47A /* SMLWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0F2883B09BCE5C9B43166B9A /* SMLWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		807B62334C0FE02A0B59CF41 /* SMLWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 574D6F02BA1AF5C70E5F8DDA /* SMLWidget.swift */; };
+		AA11BB22CC33DD44EE55FF66 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D5A7A2072F64AF2E00BC6815 /* Assets.xcassets */; };
+		AA22BB33CC44DD55EE66FF78 /* NativeGuestHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA22BB33CC44DD55EE66FF77 /* NativeGuestHomeView.swift */; };
 		B4BE104C5AFFCEDCC121645C /* SMLWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FE2C00576976AEC8DC12AC4 /* SMLWidgetShared.swift */; };
+		BB33CC44DD55EE66FF778801 /* NativeClientHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB33CC44DD55EE66FF778800 /* NativeClientHomeView.swift */; };
 		C9778975230A187C7DC92FFE /* SMLWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C990C272E3E79C40B39A3CE /* SMLWidgetBundle.swift */; };
+		CC44DD55EE66FF7788990011 /* SMLIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC44DD55EE66FF7788990010 /* SMLIntents.swift */; };
 		D591D1752F64B7F1003A8934 /* RoleState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D591D1742F64B7F1003A8934 /* RoleState.swift */; };
 		D5A7A2042F64AF2A00BC6815 /* SMLApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7A2032F64AF2A00BC6815 /* SMLApp.swift */; };
 		D5A7A2062F64AF2A00BC6815 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7A2052F64AF2A00BC6815 /* ContentView.swift */; };
-		FF1122334455667788AABBCC /* iPadRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF1122334455667788AABB00 /* iPadRootView.swift */; };
-		AA22BB33CC44DD55EE66FF78 /* NativeGuestHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA22BB33CC44DD55EE66FF77 /* NativeGuestHomeView.swift */; };
-		BB33CC44DD55EE66FF778801 /* NativeClientHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB33CC44DD55EE66FF778800 /* NativeClientHomeView.swift */; };
-		CC44DD55EE66FF7788990011 /* SMLIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC44DD55EE66FF7788990010 /* SMLIntents.swift */; };
-		DD55EE66FF77889900112201 /* SMLLiveActivityShared.swift in Sources (App) */ = {isa = PBXBuildFile; fileRef = DD55EE66FF7788990011220F /* SMLLiveActivityShared.swift */; };
-		DD55EE66FF77889900112202 /* SMLLiveActivityShared.swift in Sources (Widget) */ = {isa = PBXBuildFile; fileRef = DD55EE66FF7788990011220F /* SMLLiveActivityShared.swift */; };
-		EE66FF778899001122330011 /* SMLLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE66FF778899001122330010 /* SMLLiveActivityManager.swift */; };
-		FF778899001122334455AA01 /* SMLLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF778899001122334455AA00 /* SMLLiveActivity.swift */; };
-		AA11BB22CC33DD44EE55FF66 /* Assets.xcassets in Resources (Widget) */ = {isa = PBXBuildFile; fileRef = D5A7A2072F64AF2E00BC6815 /* Assets.xcassets */; };
 		D5A7A2082F64AF2E00BC6815 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D5A7A2072F64AF2E00BC6815 /* Assets.xcassets */; };
 		D5A7A20B2F64AF2E00BC6815 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D5A7A20A2F64AF2E00BC6815 /* Preview Assets.xcassets */; };
 		D5A7A2122F64AFFC00BC6815 /* WebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7A2112F64AFFC00BC6815 /* WebView.swift */; };
@@ -35,8 +30,13 @@
 		D5A7A21C2F64B0F700BC6815 /* Launch Screen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = D5A7A21B2F64B0F700BC6815 /* Launch Screen.storyboard */; };
 		D5D844872F89D62E006E3B11 /* LocationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5D844862F89D62E006E3B11 /* LocationBridge.swift */; };
 		D5DCC5492F85F6900071FD65 /* QuoteRequestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5DCC5482F85F6900071FD65 /* QuoteRequestView.swift */; };
+		DD55EE66FF77889900112201 /* SMLLiveActivityShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD55EE66FF7788990011220F /* SMLLiveActivityShared.swift */; };
+		DD55EE66FF77889900112202 /* SMLLiveActivityShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD55EE66FF7788990011220F /* SMLLiveActivityShared.swift */; };
 		E2758474238049926B2DE518 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F8682DD32D90E119B9FDB122 /* SwiftUI.framework */; };
+		EE66FF778899001122330011 /* SMLLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE66FF778899001122330010 /* SMLLiveActivityManager.swift */; };
 		F4264A0F34A5185FA539BC40 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E445B850E1CED029E85D300E /* Foundation.framework */; };
+		FF1122334455667788AABBCC /* iPadRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF1122334455667788AABB00 /* iPadRootView.swift */; };
+		FF778899001122334455AA01 /* SMLLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF778899001122334455AA00 /* SMLLiveActivity.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,17 +70,13 @@
 		4FE2C00576976AEC8DC12AC4 /* SMLWidgetShared.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMLWidgetShared.swift; sourceTree = "<group>"; };
 		574D6F02BA1AF5C70E5F8DDA /* SMLWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMLWidget.swift; sourceTree = "<group>"; };
 		7E1E4A014B65F5B2582BF6FC /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		AA22BB33CC44DD55EE66FF77 /* NativeGuestHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeGuestHomeView.swift; sourceTree = "<group>"; };
+		BB33CC44DD55EE66FF778800 /* NativeClientHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeClientHomeView.swift; sourceTree = "<group>"; };
+		CC44DD55EE66FF7788990010 /* SMLIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLIntents.swift; sourceTree = "<group>"; };
 		D591D1742F64B7F1003A8934 /* RoleState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoleState.swift; sourceTree = "<group>"; };
 		D5A7A2002F64AF2A00BC6815 /* SML.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SML.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D5A7A2032F64AF2A00BC6815 /* SMLApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLApp.swift; sourceTree = "<group>"; };
 		D5A7A2052F64AF2A00BC6815 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		FF1122334455667788AABB00 /* iPadRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadRootView.swift; sourceTree = "<group>"; };
-		AA22BB33CC44DD55EE66FF77 /* NativeGuestHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeGuestHomeView.swift; sourceTree = "<group>"; };
-		BB33CC44DD55EE66FF778800 /* NativeClientHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeClientHomeView.swift; sourceTree = "<group>"; };
-		CC44DD55EE66FF7788990010 /* SMLIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLIntents.swift; sourceTree = "<group>"; };
-		DD55EE66FF7788990011220F /* SMLLiveActivityShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLLiveActivityShared.swift; sourceTree = "<group>"; };
-		EE66FF778899001122330010 /* SMLLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLLiveActivityManager.swift; sourceTree = "<group>"; };
-		FF778899001122334455AA00 /* SMLLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLLiveActivity.swift; sourceTree = "<group>"; };
 		D5A7A2072F64AF2E00BC6815 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D5A7A20A2F64AF2E00BC6815 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		D5A7A2112F64AFFC00BC6815 /* WebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebView.swift; sourceTree = "<group>"; };
@@ -93,8 +89,12 @@
 		D5BA7C422F64C52E00E09798 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D5D844862F89D62E006E3B11 /* LocationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationBridge.swift; sourceTree = "<group>"; };
 		D5DCC5482F85F6900071FD65 /* QuoteRequestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteRequestView.swift; sourceTree = "<group>"; };
+		DD55EE66FF7788990011220F /* SMLLiveActivityShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLLiveActivityShared.swift; sourceTree = "<group>"; };
 		E445B850E1CED029E85D300E /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		EE66FF778899001122330010 /* SMLLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLLiveActivityManager.swift; sourceTree = "<group>"; };
 		F8682DD32D90E119B9FDB122 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		FF1122334455667788AABB00 /* iPadRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadRootView.swift; sourceTree = "<group>"; };
+		FF778899001122334455AA00 /* SMLLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLLiveActivity.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -137,11 +137,9 @@
 				0D2DCEC9B6D2A1115211A249 /* SMLWidget.entitlements */,
 				FF778899001122334455AA00 /* SMLLiveActivity.swift */,
 			);
-			name = SMLWidget;
 			path = SMLWidget;
 			sourceTree = "<group>";
 		};
-
 		B198001CCE303AABA5DFAB5A /* iOS */ = {
 			isa = PBXGroup;
 			children = (
@@ -283,7 +281,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA11BB22CC33DD44EE55FF66 /* Assets.xcassets in Resources (Widget) */,
+				AA11BB22CC33DD44EE55FF66 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -307,7 +305,7 @@
 				807B62334C0FE02A0B59CF41 /* SMLWidget.swift in Sources */,
 				C9778975230A187C7DC92FFE /* SMLWidgetBundle.swift in Sources */,
 				383E2664D42C86098F069013 /* SMLWidgetShared.swift in Sources */,
-				DD55EE66FF77889900112202 /* SMLLiveActivityShared.swift in Sources (Widget) */,
+				DD55EE66FF77889900112202 /* SMLLiveActivityShared.swift in Sources */,
 				FF778899001122334455AA01 /* SMLLiveActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -324,7 +322,7 @@
 				AA22BB33CC44DD55EE66FF78 /* NativeGuestHomeView.swift in Sources */,
 				BB33CC44DD55EE66FF778801 /* NativeClientHomeView.swift in Sources */,
 				CC44DD55EE66FF7788990011 /* SMLIntents.swift in Sources */,
-				DD55EE66FF77889900112201 /* SMLLiveActivityShared.swift in Sources (App) */,
+				DD55EE66FF77889900112201 /* SMLLiveActivityShared.swift in Sources */,
 				EE66FF778899001122330011 /* SMLLiveActivityManager.swift in Sources */,
 				D5A7A21A2F64B0D100BC6815 /* AppDelegate.swift in Sources */,
 				D5D844872F89D62E006E3B11 /* LocationBridge.swift in Sources */,
@@ -496,6 +494,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = Yes;
 				CODE_SIGN_ENTITLEMENTS = SML/SML.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -516,6 +515,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
+				NEW_SETTING = "";
+				NEW_SETTING1 = "";
 				PRODUCT_BUNDLE_IDENTIFIER = stmaryslandscaping.ca.SML;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -529,6 +530,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = Yes;
 				CODE_SIGN_ENTITLEMENTS = SML/SML.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -549,6 +551,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
+				NEW_SETTING = "";
+				NEW_SETTING1 = "";
 				PRODUCT_BUNDLE_IDENTIFIER = stmaryslandscaping.ca.SML;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
