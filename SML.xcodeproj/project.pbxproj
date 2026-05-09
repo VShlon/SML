@@ -17,6 +17,7 @@
 		BB33CC44DD55EE66FF778801 /* NativeClientHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB33CC44DD55EE66FF778800 /* NativeClientHomeView.swift */; };
 		C9778975230A187C7DC92FFE /* SMLWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C990C272E3E79C40B39A3CE /* SMLWidgetBundle.swift */; };
 		CC44DD55EE66FF7788990011 /* SMLIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC44DD55EE66FF7788990010 /* SMLIntents.swift */; };
+		D566A59E2FAFB6090097B0F8 /* SMLLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE66FF778899001122330010 /* SMLLiveActivityManager.swift */; };
 		D591D1752F64B7F1003A8934 /* RoleState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D591D1742F64B7F1003A8934 /* RoleState.swift */; };
 		D5A7A2042F64AF2A00BC6815 /* SMLApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7A2032F64AF2A00BC6815 /* SMLApp.swift */; };
 		D5A7A2062F64AF2A00BC6815 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7A2052F64AF2A00BC6815 /* ContentView.swift */; };
@@ -305,6 +306,7 @@
 				807B62334C0FE02A0B59CF41 /* SMLWidget.swift in Sources */,
 				C9778975230A187C7DC92FFE /* SMLWidgetBundle.swift in Sources */,
 				383E2664D42C86098F069013 /* SMLWidgetShared.swift in Sources */,
+				D566A59E2FAFB6090097B0F8 /* SMLLiveActivityManager.swift in Sources */,
 				DD55EE66FF77889900112202 /* SMLLiveActivityShared.swift in Sources */,
 				FF778899001122334455AA01 /* SMLLiveActivity.swift in Sources */,
 			);

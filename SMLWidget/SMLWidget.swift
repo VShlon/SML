@@ -53,63 +53,144 @@ private func isStaff(_ role: String) -> Bool { staffRoles.contains(role) }
 
 // MARK: - Tab descriptor
 
-private struct WTab {
+private struct WTab: Identifiable {
     let icon: String
     let label: String
     let url: URL
+    var id: String { url.absoluteString }
+}
+
+// Safe URL builder - sml:// scheme strings are compile-time constants and never fail,
+// but using a helper avoids force-unwraps scattered across the file.
+private func smlURL(_ path: String) -> URL {
+    URL(string: "sml://\(path)") ?? URL(string: "sml://home")!
 }
 
 private func tabs(for role: String) -> [WTab] {
     switch role {
     case "worker":
         return [
-            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
-            .init(icon: "calendar",                 label: "Workday",   url: URL(string: "sml://workday")!),
-            .init(icon: "checklist",                label: "Tasks",     url: URL(string: "sml://tasks-today")!),
-            .init(icon: "exclamationmark.bubble",   label: "Report",    url: URL(string: "sml://report")!),
+            .init(icon: "house.fill",               label: "Home",      url: smlURL("home")),
+            .init(icon: "calendar",                 label: "Workday",   url: smlURL("workday")),
+            .init(icon: "checklist",                label: "Tasks",     url: smlURL("tasks-today")),
+            .init(icon: "exclamationmark.bubble",   label: "Report",    url: smlURL("report")),
         ]
     case "accountant":
         return [
-            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
-            .init(icon: "calendar.badge.clock",     label: "Billing",   url: URL(string: "sml://billing")!),
-            .init(icon: "calendar",                 label: "Workday",   url: URL(string: "sml://workday")!),
-            .init(icon: "dollarsign.square",        label: "Payroll",   url: URL(string: "sml://payroll")!),
+            .init(icon: "house.fill",               label: "Home",      url: smlURL("home")),
+            .init(icon: "calendar.badge.clock",     label: "Billing",   url: smlURL("billing")),
+            .init(icon: "calendar",                 label: "Workday",   url: smlURL("workday")),
+            .init(icon: "dollarsign.square",        label: "Payroll",   url: smlURL("payroll")),
         ]
     case "manager":
         return [
-            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
-            .init(icon: "plus.square.fill",         label: "Create",    url: URL(string: "sml://create")!),
-            .init(icon: "calendar",                 label: "Workday",   url: URL(string: "sml://workday")!),
-            .init(icon: "tray.full",                label: "Tasks",     url: URL(string: "sml://all-tasks")!),
+            .init(icon: "house.fill",               label: "Home",      url: smlURL("home")),
+            .init(icon: "plus.square.fill",         label: "Create",    url: smlURL("create")),
+            .init(icon: "calendar",                 label: "Workday",   url: smlURL("workday")),
+            .init(icon: "tray.full",                label: "Tasks",     url: smlURL("all-tasks")),
         ]
     case "administrator":
         return [
-            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
-            .init(icon: "plus.square.fill",         label: "Create",    url: URL(string: "sml://create")!),
-            .init(icon: "rectangle.3.group.fill",   label: "Workspace", url: URL(string: "sml://workspace")!),
-            .init(icon: "tray.full",                label: "All Tasks", url: URL(string: "sml://all-tasks")!),
+            .init(icon: "house.fill",               label: "Home",      url: smlURL("home")),
+            .init(icon: "plus.square.fill",         label: "Create",    url: smlURL("create")),
+            .init(icon: "rectangle.3.group.fill",   label: "Workspace", url: smlURL("workspace")),
+            .init(icon: "tray.full",                label: "All Tasks", url: smlURL("all-tasks")),
         ]
     case "owner":
         return [
-            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
-            .init(icon: "plus.square.fill",         label: "Create",    url: URL(string: "sml://create")!),
-            .init(icon: "calendar",                 label: "Workday",   url: URL(string: "sml://workday")!),
-            .init(icon: "tray.full",                label: "All Tasks", url: URL(string: "sml://all-tasks")!),
+            .init(icon: "house.fill",               label: "Home",      url: smlURL("home")),
+            .init(icon: "plus.square.fill",         label: "Create",    url: smlURL("create")),
+            .init(icon: "calendar",                 label: "Workday",   url: smlURL("workday")),
+            .init(icon: "tray.full",                label: "All Tasks", url: smlURL("all-tasks")),
         ]
     case "client":
         return [
-            .init(icon: "house.fill",                    label: "Home",        url: URL(string: "sml://home")!),
-            .init(icon: "list.bullet.clipboard.fill",    label: "Requests",    url: URL(string: "sml://requests")!),
-            .init(icon: "paperplane.fill",               label: "New Request", url: URL(string: "sml://quote")!),
-            .init(icon: "person.crop.circle.fill",       label: "Account",     url: URL(string: "sml://account")!),
+            .init(icon: "house.fill",                    label: "Home",        url: smlURL("home")),
+            .init(icon: "list.bullet.clipboard.fill",    label: "Requests",    url: smlURL("requests")),
+            .init(icon: "paperplane.fill",               label: "New Request", url: smlURL("quote")),
+            .init(icon: "person.crop.circle.fill",       label: "Account",     url: smlURL("account")),
         ]
     default: // guest
         return [
-            .init(icon: "paperplane.fill",          label: "Get Quote", url: URL(string: "sml://quote")!),
-            .init(icon: "leaf.fill",                label: "Services",  url: URL(string: "sml://services")!),
-            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
-            .init(icon: "person.fill",              label: "Sign In",   url: URL(string: "sml://account")!),
+            .init(icon: "paperplane.fill",          label: "Get Quote", url: smlURL("quote")),
+            .init(icon: "leaf.fill",                label: "Services",  url: smlURL("services")),
+            .init(icon: "house.fill",               label: "Home",      url: smlURL("home")),
+            .init(icon: "person.fill",              label: "Sign In",   url: smlURL("account")),
         ]
+    }
+}
+
+// MARK: - Order row (used in client medium/large widgets)
+
+private struct OrderRow: View {
+    let order: WidgetOrder
+
+    // in_progress = green fill (being worked on right now)
+    // scheduled   = orange fill (date is set)
+    // pending     = gray hollow (submitted, waiting)
+    private var dotColor: Color {
+        switch order.status {
+        case "in_progress": return brandGreen
+        case "scheduled":   return .orange
+        default:            return Color.primary.opacity(0.25)
+        }
+    }
+
+    private var icon: String {
+        switch order.status {
+        case "in_progress", "scheduled": return "circle.fill"
+        default:                         return "circle"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(dotColor)
+                .frame(width: 10)
+            Text(order.title)
+                .font(.system(size: 11))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        }
+    }
+}
+
+// MARK: - Task row (used in worker medium/large widgets)
+
+private struct TaskRow: View {
+    let task: WidgetTask
+
+    // started = green fill (in progress)
+    // accepted = orange fill (accepted, not yet started)
+    // pending / assigned / anything else = gray hollow (new, not yet accepted)
+    private var dotColor: Color {
+        switch task.status {
+        case "started":  return brandGreen
+        case "accepted": return .orange
+        default:         return Color.primary.opacity(0.25)
+        }
+    }
+
+    private var icon: String {
+        switch task.status {
+        case "started", "accepted": return "circle.fill"
+        default:                    return "circle"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(dotColor)
+                .frame(width: 10)
+            Text(task.title)
+                .font(.system(size: 11))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        }
     }
 }
 
@@ -149,14 +230,16 @@ private struct WorkdayBadge: View {
 // MARK: - Order progress (4 steps)
 
 private struct OrderProgress: View {
-    let status: String // pending | scheduled | in_progress | completed
+    let status: String // pending | scheduled | in_progress | completed | cancelled
 
+    // -1 = cancelled (all circles hollow/gray, none highlighted)
     private var step: Int {
         switch status {
         case "pending":     return 0
         case "scheduled":   return 1
         case "in_progress": return 2
         case "completed":   return 3
+        case "cancelled":   return -1
         default:            return 0
         }
     }
@@ -194,7 +277,7 @@ private struct WidgetTabBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(items, id: \.label) { tab in
+            ForEach(items) { tab in
                 Link(destination: tab.url) {
                     VStack(spacing: 3) {
                         Image(systemName: tab.icon)
@@ -217,10 +300,10 @@ private struct WidgetTabBar: View {
 
 private func primaryURL(for role: String) -> URL {
     switch role {
-    case "guest":          return URL(string: "sml://quote")!
-    case "client":         return URL(string: "sml://requests")!
-    case "worker":         return URL(string: "sml://tasks-today")!
-    default:               return URL(string: "sml://workday")!
+    case "guest":   return smlURL("quote")
+    case "client":  return smlURL("requests")
+    case "worker":  return smlURL("tasks-today")
+    default:        return smlURL("workday")
     }
 }
 
@@ -257,20 +340,20 @@ struct SMLSmallWidgetView: View {
         .widgetURL(primaryURL(for: e.role))
     }
 
-    // Client: active request status
+    // Client: most important active order (small widget)
     private var clientBody: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if !e.orderTitle.isEmpty && !e.orderStatus.isEmpty && e.orderStatus != "completed" && e.orderStatus != "cancelled" {
-                Text("Active Request")
+            if let top = e.orders.first {
+                Text(e.orders.count == 1 ? "Active Request" : "\(e.orders.count) Active Requests")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(brandGreen)
                     .tracking(0.5)
-                Text(e.orderTitle)
-                    .font(.system(size: 14, weight: .bold))
+                Text(top.title)
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
-                OrderProgress(status: e.orderStatus)
+                OrderProgress(status: top.status)
                     .padding(.top, 4)
             } else {
                 Text("My\nRequests")
@@ -385,7 +468,7 @@ struct SMLMediumWidgetView: View {
     private var middleContent: some View {
         if e.role == "client" {
             clientMiddle
-        } else if e.role == "worker" {
+        } else if e.role == "worker" || (isStaff(e.role) && !e.tasks.isEmpty) {
             workerMiddle
         } else if isStaff(e.role) {
             staffMiddle
@@ -394,43 +477,52 @@ struct SMLMediumWidgetView: View {
         }
     }
 
-    // Client: show active order or CTA
+    // Client: list of active orders
     private var clientMiddle: some View {
         HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 5) {
-                if !e.orderTitle.isEmpty && !e.orderStatus.isEmpty && e.orderStatus != "cancelled" {
-                    Text(e.orderTitle)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    OrderProgress(status: e.orderStatus)
-                        .frame(maxWidth: 220)
-                } else {
+            VStack(alignment: .leading, spacing: 4) {
+                if e.orders.isEmpty {
                     Text("No active requests")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.primary)
-                    Text("Tap Requests or New Request below")
+                    Text("Tap New Request below to submit one")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                } else {
+                    ForEach(e.orders.prefix(3)) { order in
+                        OrderRow(order: order)
+                    }
+                    if e.orders.count > 3 {
+                        Text("+ \(e.orders.count - 3) more")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
                 }
             }
             Spacer()
         }
     }
 
-    // Worker: task count + next task
+    // Worker: task count + task list (up to 3)
     private var workerMiddle: some View {
-        HStack(alignment: .bottom, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .lastTextBaseline, spacing: 4) {
                     Text("\(e.taskCount)")
-                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
                         .foregroundStyle(brandGreen)
                     Text(e.taskCount == 1 ? "task today" : "tasks today")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
-                if !e.nextTaskTitle.isEmpty {
+                ForEach(e.tasks.prefix(3)) { task in
+                    TaskRow(task: task)
+                }
+                if e.tasks.count > 3 {
+                    Text("+ \(e.tasks.count - 3) more")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                } else if e.tasks.isEmpty && !e.nextTaskTitle.isEmpty {
                     Text("Next: \(e.nextTaskTitle)")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
@@ -517,7 +609,7 @@ struct SMLLargeWidgetView: View {
 
             // Quick links grid 2x2
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(tabList, id: \.label) { tab in
+                ForEach(tabList) { tab in
                     Link(destination: tab.url) {
                         HStack(spacing: 8) {
                             Image(systemName: tab.icon)
@@ -547,7 +639,7 @@ struct SMLLargeWidgetView: View {
     private var largeBody: some View {
         if e.role == "client" {
             clientLarge
-        } else if e.role == "worker" {
+        } else if e.role == "worker" || (isStaff(e.role) && !e.tasks.isEmpty) {
             workerLarge
         } else if isStaff(e.role) {
             staffLarge
@@ -557,19 +649,8 @@ struct SMLLargeWidgetView: View {
     }
 
     private var clientLarge: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if !e.orderTitle.isEmpty && e.orderStatus != "cancelled" {
-                Text("Active Request")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(brandGreen)
-                    .tracking(0.8)
-                Text(e.orderTitle)
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                OrderProgress(status: e.orderStatus)
-                    .padding(.top, 4)
-            } else {
+        VStack(alignment: .leading, spacing: 6) {
+            if e.orders.isEmpty {
                 Text("No active requests")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.primary)
@@ -577,23 +658,52 @@ struct SMLLargeWidgetView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
+            } else {
+                Text(e.orders.count == 1 ? "1 Active Request" : "\(e.orders.count) Active Requests")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(brandGreen)
+                    .tracking(0.8)
+                Rectangle()
+                    .fill(Color.primary.opacity(0.07))
+                    .frame(height: 0.5)
+                    .padding(.vertical, 2)
+                ForEach(e.orders.prefix(6)) { order in
+                    OrderRow(order: order)
+                }
+                if e.orders.count > 6 {
+                    Text("+ \(e.orders.count - 6) more")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
     }
 
     private var workerLarge: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             WorkdayBadge(status: e.workdayStatus)
             HStack(alignment: .lastTextBaseline, spacing: 6) {
                 Text("\(e.taskCount)")
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                    .font(.system(size: 38, weight: .bold, design: .rounded))
                     .foregroundStyle(brandGreen)
-                Text(e.taskCount == 1 ? "task\ntoday" : "tasks\ntoday")
-                    .font(.system(size: 13, weight: .medium))
+                Text(e.taskCount == 1 ? "task today" : "tasks today")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .lineSpacing(1)
             }
-            if !e.nextTaskTitle.isEmpty {
+            if !e.tasks.isEmpty {
+                Rectangle()
+                    .fill(Color.primary.opacity(0.07))
+                    .frame(height: 0.5)
+                    .padding(.vertical, 2)
+                ForEach(e.tasks.prefix(6)) { task in
+                    TaskRow(task: task)
+                }
+                if e.tasks.count > 6 {
+                    Text("+ \(e.tasks.count - 6) more")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+            } else if !e.nextTaskTitle.isEmpty {
                 HStack(spacing: 6) {
                     Image(systemName: "mappin.circle.fill")
                         .font(.system(size: 12))

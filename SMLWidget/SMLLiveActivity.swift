@@ -128,16 +128,18 @@ struct WorkdayLiveActivity: Widget {
             } compactTrailing: {
                 if context.state.status == "paused" {
                     Text(context.state.pauseStart, style: .timer)
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
                         .foregroundStyle(.orange)
                         .monospacedDigit()
-                        .frame(maxWidth: 52)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: 80)
                 } else {
                     Text(context.state.adjustedStart, style: .timer)
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
                         .foregroundStyle(brandGreen)
                         .monospacedDigit()
-                        .frame(maxWidth: 52)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: 80)
                 }
             } minimal: {
                 Circle()

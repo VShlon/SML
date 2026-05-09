@@ -52,6 +52,7 @@ struct ContentView: View {
 
     @State private var suppressReloadOnce: Bool = false
     @State private var needsHomeRefreshAfterExternal: Bool = false
+    @State private var pendingSiriRoute: String? = nil
 
     private let allowedHost = "stmaryslandscaping.ca"
 
@@ -99,6 +100,16 @@ struct ContentView: View {
             guard oldMode != newMode else { return }
 
             applyTabBarAppearance()
+
+            // If a Siri route was stored while the role was still unknown, apply it now.
+            if oldMode == .guest, newMode != .guest, let route = pendingSiriRoute {
+                pendingSiriRoute = nil
+                let tab = siriTab(for: route, mode: newMode)
+                suppressReloadOnce = true
+                selected = tab
+                lastNonMoreTab = tab
+                return
+            }
 
             let fallback = tabForRoleTransition(from: oldMode, to: newMode, current: lastNonMoreTab)
 
@@ -168,12 +179,17 @@ struct ContentView: View {
                     resetAllTabsToRoot()
                 }
 
-                // Handle Siri shortcut routing
-                if let route = UserDefaults.standard.consumeSiriRoute() {
-                    let tab = siriTab(for: route, mode: roleState.mode)
-                    suppressReloadOnce = true
-                    selected = tab
+                // Handle Siri shortcut routing (app was in background when Siri fired).
+                // Must use the shared App Group store - intents write there from a separate process.
+                if let route = UserDefaults.siriRouteStore.consumeSiriRoute() {
+                    applySiriRoute(route)
                 }
+            }
+        }
+        // Handle Siri shortcut routing when the app is already active.
+        .onReceive(NotificationCenter.default.publisher(for: .smlSiriRoute)) { _ in
+            if let route = UserDefaults.siriRouteStore.consumeSiriRoute() {
+                applySiriRoute(route)
             }
         }
         .preferredColorScheme(.light)
@@ -754,6 +770,19 @@ struct ContentView: View {
     }
 
     // MARK: - Siri Shortcut routing
+
+    private func applySiriRoute(_ route: String) {
+        // If mode is guest but there is a persisted role, the session is still
+        // loading - defer until onChange(of: roleState.mode) fires with the real role.
+        if roleState.mode == .guest,
+           UserDefaults.standard.string(forKey: "sml.role.mode") != nil {
+            pendingSiriRoute = route
+            return
+        }
+        let tab = siriTab(for: route, mode: roleState.mode)
+        suppressReloadOnce = true
+        selected = tab
+    }
 
     private func siriTab(for route: String, mode: RoleState.Mode) -> Tab {
         switch route {

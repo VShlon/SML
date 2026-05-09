@@ -10,9 +10,10 @@
 import AppIntents
 import Foundation
 
-// MARK: - Routing key
-
-private let siriRouteKey = "sml.siri.route"
+// Posted from each intent so ContentView can react even when the app is already active.
+extension Notification.Name {
+    static let smlSiriRoute = Notification.Name("smlSiriRoute")
+}
 
 // MARK: - Worker: Start Workday
 
@@ -23,7 +24,8 @@ struct StartWorkdayIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        UserDefaults.standard.set("workday", forKey: siriRouteKey)
+        UserDefaults.siriRouteStore.set("workday", forKey: UserDefaults.siriRouteKey)
+        NotificationCenter.default.post(name: .smlSiriRoute, object: nil)
         return .result()
     }
 }
@@ -37,7 +39,8 @@ struct EndWorkdayIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        UserDefaults.standard.set("workday", forKey: siriRouteKey)
+        UserDefaults.siriRouteStore.set("workday", forKey: UserDefaults.siriRouteKey)
+        NotificationCenter.default.post(name: .smlSiriRoute, object: nil)
         return .result()
     }
 }
@@ -51,7 +54,8 @@ struct ViewTasksIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        UserDefaults.standard.set("tasks", forKey: siriRouteKey)
+        UserDefaults.siriRouteStore.set("tasks", forKey: UserDefaults.siriRouteKey)
+        NotificationCenter.default.post(name: .smlSiriRoute, object: nil)
         return .result()
     }
 }
@@ -65,7 +69,8 @@ struct NewRequestIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        UserDefaults.standard.set("new-request", forKey: siriRouteKey)
+        UserDefaults.siriRouteStore.set("new-request", forKey: UserDefaults.siriRouteKey)
+        NotificationCenter.default.post(name: .smlSiriRoute, object: nil)
         return .result()
     }
 }
@@ -79,7 +84,8 @@ struct ViewRequestsIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        UserDefaults.standard.set("requests", forKey: siriRouteKey)
+        UserDefaults.siriRouteStore.set("requests", forKey: UserDefaults.siriRouteKey)
+        NotificationCenter.default.post(name: .smlSiriRoute, object: nil)
         return .result()
     }
 }
@@ -144,6 +150,12 @@ struct SMLShortcuts: AppShortcutsProvider {
 
 extension UserDefaults {
     static let siriRouteKey = "sml.siri.route"
+
+    // App Intents run in a separate process - must use the shared App Group
+    // container so the route written by the intent is visible to the main app.
+    static var siriRouteStore: UserDefaults {
+        UserDefaults(suiteName: "group.ca.stmaryslandscaping.app") ?? .standard
+    }
 
     func consumeSiriRoute() -> String? {
         let val = string(forKey: Self.siriRouteKey)

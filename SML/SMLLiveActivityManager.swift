@@ -25,6 +25,13 @@ final class SMLLiveActivityManager {
     private var workdayActivity: Activity<WorkdayActivityAttributes>?
     private var orderActivity:   Activity<OrderActivityAttributes>?
 
+    // MARK: - Token observation (one Task per activity instance, never accumulate)
+
+    private var workdayTokenTask: Task<Void, Never>?
+    private var orderTokenTask:   Task<Void, Never>?
+    private var observedWorkdayActivityId: String?
+    private var observedOrderActivityId:   String?
+
     // MARK: - Workday (workers)
 
     func startWorkday(workerName: String) {
@@ -48,14 +55,19 @@ final class SMLLiveActivityManager {
     }
 
     // Observes the first push token for the workday activity and reports it via onTokenUpdate.
+    // Guard prevents duplicate Tasks when syncWorkday is called repeatedly for the same activity.
     private func observeWorkdayToken() {
         guard let activity = workdayActivity else { return }
+        guard activity.id != observedWorkdayActivityId else { return }
+        observedWorkdayActivityId = activity.id
+        workdayTokenTask?.cancel()
         let isSandbox = UserDefaults(suiteName: "group.ca.stmaryslandscaping.app")?.bool(forKey: "sml_is_sandbox_push") ?? false
-        Task {
+        workdayTokenTask = Task { [weak self] in
             for await tokenData in activity.pushTokenUpdates {
+                guard !Task.isCancelled else { break }
                 let hex = tokenData.map { String(format: "%02x", $0) }.joined()
                 NSLog("[LiveActivity] workday push token: \(hex)")
-                self.onTokenUpdate?("workday", hex, "", isSandbox)
+                self?.onTokenUpdate?("workday", hex, "", isSandbox)
                 break
             }
         }
@@ -64,10 +76,16 @@ final class SMLLiveActivityManager {
     // Syncs workday activity with server state (called on page load).
     // Reattaches to a running activity after app restart, or starts a new one.
     // pauseStartUnix: unix timestamp of when current pause started (0 if not paused or unknown).
-    func syncWorkday(workerName: String, adjustedStartUnix: Double, status: String, pauseStartUnix: Double = 0) {
+    func syncWorkday(workerName: String, adjustedStartUnix: Double, status: String, pauseStartUnix: Double = 0, isRetry: Bool = false) {
         let enabled = ActivityAuthorizationInfo().areActivitiesEnabled
         NSLog("[LiveActivity] syncWorkday called: name=\(workerName) start=\(adjustedStartUnix) status=\(status) enabled=\(enabled)")
         guard enabled else { return }
+
+        // Workday is over - end any running activity and bail.
+        if status != "open" && status != "active" && status != "paused" {
+            endWorkday()
+            return
+        }
 
         let adjustedStart = adjustedStartUnix > 0
             ? Date(timeIntervalSince1970: adjustedStartUnix)
@@ -90,7 +108,7 @@ final class SMLLiveActivityManager {
             )
             Task { await existing.update(.init(state: newState, staleDate: nil)) }
             observeWorkdayToken()
-        } else if status == "open" || status == "active" || status == "paused" {
+        } else {
             NSLog("[LiveActivity] syncWorkday: starting NEW activity")
             let state = WorkdayActivityAttributes.ContentState(
                 status: liveStatus,
@@ -108,9 +126,29 @@ final class SMLLiveActivityManager {
                 observeWorkdayToken()
             } catch {
                 NSLog("[LiveActivity] syncWorkday start failed: \(error)")
+                // "visibility" means the app wasn't fully in the foreground yet.
+                // Retry once after a short delay - by then the UI is visible.
+                let desc = "\(error)".lowercased()
+                if !isRetry && (desc.contains("visibility") || desc.contains("foreground")) {
+                    let name   = workerName
+                    let start  = adjustedStartUnix
+                    let st     = status
+                    let pause  = pauseStartUnix
+                    Task { [weak self] in
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        guard let self else { return }
+                        await MainActor.run { [self] in
+                            self.syncWorkday(
+                                workerName: name,
+                                adjustedStartUnix: start,
+                                status: st,
+                                pauseStartUnix: pause,
+                                isRetry: true
+                            )
+                        }
+                    }
+                }
             }
-        } else {
-            NSLog("[LiveActivity] syncWorkday: status '\(status)' - no activity started")
         }
     }
 
@@ -139,16 +177,29 @@ final class SMLLiveActivityManager {
     }
 
     func endWorkday() {
-        guard let activity = workdayActivity else { return }
+        // Cancel token observation before clearing the reference.
+        workdayTokenTask?.cancel()
+        workdayTokenTask = nil
+        observedWorkdayActivityId = nil
+        // Capture all running activities before clearing the reference.
+        let allActivities = Activity<WorkdayActivityAttributes>.activities
+        let primary = workdayActivity ?? allActivities.first
+        workdayActivity = nil
+        guard primary != nil || !allActivities.isEmpty else { return }
         Task {
-            var state = activity.content.state
-            state.status = "ended"
-            // Keep on screen for 1 hour then dismiss automatically.
-            await activity.end(
-                .init(state: state, staleDate: nil),
-                dismissalPolicy: .after(Date().addingTimeInterval(3600))
-            )
-            workdayActivity = nil
+            // Show "Day Ended" on the primary activity for 1 hour.
+            if let activity = primary {
+                var state = activity.content.state
+                state.status = "ended"
+                await activity.end(
+                    .init(state: state, staleDate: nil),
+                    dismissalPolicy: .after(Date().addingTimeInterval(3600))
+                )
+            }
+            // Dismiss any orphaned activities immediately.
+            for orphan in allActivities where orphan.id != primary?.id {
+                await orphan.end(nil, dismissalPolicy: .immediate)
+            }
         }
     }
 
@@ -176,14 +227,19 @@ final class SMLLiveActivityManager {
     }
 
     // Observes the first push token for the order activity and reports it via onTokenUpdate.
+    // Guard prevents duplicate Tasks when syncOrder is called repeatedly for the same activity.
     private func observeOrderToken(orderId: String) {
         guard let activity = orderActivity else { return }
+        guard activity.id != observedOrderActivityId else { return }
+        observedOrderActivityId = activity.id
+        orderTokenTask?.cancel()
         let isSandbox = UserDefaults(suiteName: "group.ca.stmaryslandscaping.app")?.bool(forKey: "sml_is_sandbox_push") ?? false
-        Task {
+        orderTokenTask = Task { [weak self] in
             for await tokenData in activity.pushTokenUpdates {
+                guard !Task.isCancelled else { break }
                 let hex = tokenData.map { String(format: "%02x", $0) }.joined()
                 NSLog("[LiveActivity] order push token orderId=\(orderId): \(hex)")
-                self.onTokenUpdate?("order", hex, orderId, isSandbox)
+                self?.onTokenUpdate?("order", hex, orderId, isSandbox)
                 break
             }
         }
@@ -217,6 +273,13 @@ final class SMLLiveActivityManager {
 
     func updateOrder(status: String) {
         guard let activity = orderActivity else { return }
+        if status == "completed" {
+            // Clear synchronously to prevent race with endOrder.
+            orderTokenTask?.cancel()
+            orderTokenTask = nil
+            observedOrderActivityId = nil
+            orderActivity = nil
+        }
         Task {
             let state = OrderActivityAttributes.ContentState(
                 status: status,
@@ -229,7 +292,6 @@ final class SMLLiveActivityManager {
                     .init(state: state, staleDate: nil),
                     dismissalPolicy: .after(Date().addingTimeInterval(7200))
                 )
-                orderActivity = nil
             }
         }
     }
@@ -240,9 +302,13 @@ final class SMLLiveActivityManager {
             ? orderActivity
             : (orderActivity?.attributes.orderId == orderId ? orderActivity : nil)
         guard let activity = match else { return }
+        // Cancel token observation before ending the activity.
+        orderTokenTask?.cancel()
+        orderTokenTask = nil
+        observedOrderActivityId = nil
+        orderActivity = nil
         Task {
             await activity.end(nil, dismissalPolicy: .immediate)
-            orderActivity = nil
         }
     }
 }

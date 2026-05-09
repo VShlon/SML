@@ -304,10 +304,32 @@ extension WebView {
                     let workdayStatus = (dict["workdayStatus"] as? String) ?? "none"
                     let orderTitle    = (dict["orderTitle"]    as? String) ?? ""
                     let orderStatus   = (dict["orderStatus"]   as? String) ?? ""
+                    var widgetTasks: [WidgetTask] = []
+                    if let rawTasks = dict["tasks"] as? [[String: Any]] {
+                        widgetTasks = rawTasks.enumerated().map { i, t in
+                            WidgetTask(
+                                id:     (t["id"]     as? String) ?? "\(i)",
+                                title:  (t["title"]  as? String) ?? "",
+                                status: (t["status"] as? String) ?? "pending"
+                            )
+                        }
+                    }
+                    var widgetOrders: [WidgetOrder] = []
+                    if let rawOrders = dict["orders"] as? [[String: Any]] {
+                        widgetOrders = rawOrders.enumerated().map { i, o in
+                            WidgetOrder(
+                                id:     (o["id"]     as? String) ?? "\(i)",
+                                title:  (o["title"]  as? String) ?? "",
+                                status: (o["status"] as? String) ?? "pending"
+                            )
+                        }
+                    }
                     smlWidgetWrite(
                         role: role,
                         taskCount: taskCount,
                         nextTaskTitle: nextTask,
+                        tasks: widgetTasks,
+                        orders: widgetOrders,
                         workdayStatus: workdayStatus,
                         orderTitle: orderTitle,
                         orderStatus: orderStatus
@@ -504,6 +526,16 @@ extension WebView {
 
             if scheme != "http" && scheme != "https" {
                 decisionHandler(.allow)
+                return
+            }
+
+            // Intercept workday-end-blocked-by-active-task redirect and show a native alert
+            // with a direct button to open the task, instead of the generic web notice.
+            if let comps = URLComponents(url: u, resolvingAgainstBaseURL: false),
+               comps.queryItems?.first(where: { $0.name == "sml_notice" && $0.value == "workday_end_active_task" }) != nil {
+                let taskId = comps.queryItems?.first(where: { $0.name == "task_id" })?.value ?? ""
+                decisionHandler(.cancel)
+                showActiveTaskBlockAlert(webView: webView, taskId: taskId)
                 return
             }
 
@@ -704,7 +736,10 @@ extension WebView {
                       workdayStatus: d.workday_status,
                       orderTitle:    d.order_title  || '',
                       orderStatus:   d.order_status || '',
-                      taskCount:     d.task_count   || 0
+                      taskCount:     d.task_count   || 0,
+                      nextTask:      d.next_task    || '',
+                      tasks:         d.tasks        || [],
+                      orders:        d.orders       || []
                     });
                   }
 
@@ -1306,6 +1341,34 @@ extension WebView {
             }
 
             promptToEnableBiometricLogin(using: pendingCredentialSave)
+        }
+
+        // Назначение:
+        // - Показывает нативный alert когда рабочий день нельзя завершить из-за активной задачи.
+        //   Кнопка "Open Task" открывает задачу прямо в приложении.
+        private func showActiveTaskBlockAlert(webView: WKWebView, taskId: String) {
+            guard let host = hostViewController else { return }
+            guard host.presentedViewController == nil else { return }
+
+            let alert = UIAlertController(
+                title: "Active Task",
+                message: "You have a task in progress. Complete or cancel it before ending your workday.",
+                preferredStyle: .alert
+            )
+
+            if !taskId.isEmpty {
+                alert.addAction(UIAlertAction(title: "Open Task", style: .default) { [weak webView] _ in
+                    guard let webView else { return }
+                    let taskURL = URL(string: "https://stmaryslandscaping.ca/tasks-today/?view_task=\(taskId)")!
+                    webView.load(URLRequest(url: taskURL))
+                })
+            }
+
+            alert.addAction(UIAlertAction(title: "OK", style: taskId.isEmpty ? .default : .cancel))
+
+            DispatchQueue.main.async {
+                host.present(alert, animated: true)
+            }
         }
 
         // Назначение:
