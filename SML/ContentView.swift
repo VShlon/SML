@@ -147,6 +147,14 @@ struct ContentView: View {
             showMoreSheet = false
             mainWindowPage = MainWindowPage(title: title, url: url)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .smlSwitchTab)) { note in
+            guard
+                let rawValue = note.userInfo?["tab"] as? String,
+                let tab = Tab(rawValue: rawValue)
+            else { return }
+            suppressReloadOnce = true
+            selected = tab
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 roleState.refresh()
@@ -158,6 +166,13 @@ struct ContentView: View {
                     selected = .left1
                     lastNonMoreTab = .left1
                     resetAllTabsToRoot()
+                }
+
+                // Handle Siri shortcut routing
+                if let route = UserDefaults.standard.consumeSiriRoute() {
+                    let tab = siriTab(for: route, mode: roleState.mode)
+                    suppressReloadOnce = true
+                    selected = tab
                 }
             }
         }
@@ -461,15 +476,21 @@ struct ContentView: View {
 
     @ViewBuilder
     private func tabBody(_ spec: TabSpec) -> some View {
-        WebView(
-            url: URL(string: spec.url)!,
-            apnsToken: push.apnsToken,
-            deviceId: push.deviceId,
-            biometricEnabled: push.biometricEnabled,
-            hasBiometricLogin: push.hasBiometricLogin,
-            command: spec.command
-        )
-        .id(spec.token)
+        if spec.tab == .left1 && roleState.mode == .guest {
+            NativeGuestHomeView()
+        } else if spec.tab == .left1 && roleState.mode == .client {
+            NativeClientHomeView()
+        } else {
+            WebView(
+                url: URL(string: spec.url)!,
+                apnsToken: push.apnsToken,
+                deviceId: push.deviceId,
+                biometricEnabled: push.biometricEnabled,
+                hasBiometricLogin: push.hasBiometricLogin,
+                command: spec.command
+            )
+            .id(spec.token)
+        }
     }
 
     // MARK: - Иконки вкладок
@@ -732,6 +753,23 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Siri Shortcut routing
+
+    private func siriTab(for route: String, mode: RoleState.Mode) -> Tab {
+        switch route {
+        case "workday":
+            switch mode {
+            case .worker:                       return .left2
+            case .accountant, .owner, .menager: return .center
+            default:                            return .left1
+            }
+        case "tasks":   return mode == .worker ? .center : .left1
+        case "new-request": return (mode == .guest || mode == .client) ? .center : .left1
+        case "requests": return mode == .client ? .left2 : .left1
+        default:         return .left1
+        }
+    }
+
     // MARK: - Widget deep link routing
 
     private func routeFromWidget(_ url: URL, mode: RoleState.Mode) {
@@ -858,45 +896,6 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Модель страницы поверх основного окна
-
-private struct MainWindowPage: Identifiable {
-    let id = UUID()
-    let title: String
-    let url: URL
-}
-
-// MARK: - Экран WebView поверх основного окна
-
-private struct MainWindowWebScreen: View {
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var push = PushState.shared
-
-    let title: String
-    let url: URL
-
-    var body: some View {
-        NavigationStack {
-            WebView(
-                url: url,
-                apnsToken: push.apnsToken,
-                deviceId: push.deviceId,
-                biometricEnabled: push.biometricEnabled,
-                hasBiometricLogin: push.hasBiometricLogin,
-                command: nil
-            )
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
 
 // MARK: - UIKit bridge для определения reselect
 

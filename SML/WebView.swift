@@ -124,6 +124,8 @@ final class WebViewController: UIViewController {
             wv.configuration.userContentController.add(coordinator, name: "smlWhoami")
             wv.configuration.userContentController.add(coordinator, name: "smlBiometric")
             wv.configuration.userContentController.add(coordinator, name: "smlWidget")
+            wv.configuration.userContentController.add(coordinator, name: "smlLiveActivity")
+            wv.configuration.userContentController.add(coordinator, name: "smlConsole")
         }
 
         wv.allowsBackForwardNavigationGestures = true
@@ -194,6 +196,12 @@ extension WebView {
 
         private var pendingCommand: WebNavigationCommand? = nil
         private var lastHandledCommandId: UUID? = nil
+
+        // Pending Live Activity token to register once a webView is attached.
+        private var pendingLATokenType: String = ""
+        private var pendingLATokenValue: String = ""
+        private var pendingLATokenOrderId: String = ""
+        private var pendingLATokenSandbox: Bool = false
 
         fileprivate var didFinishOnce: Bool = false
 
@@ -290,12 +298,97 @@ extension WebView {
 
             if message.name == "smlWidget" {
                 if let dict = message.body as? [String: Any] {
-                    let role           = (dict["role"]           as? String) ?? "worker"
-                    let taskCount      = (dict["taskCount"]      as? Int)    ?? 0
-                    let nextTask       = (dict["nextTask"]       as? String) ?? ""
-                    let workdayStatus  = (dict["workdayStatus"]  as? String) ?? "none"
-                    smlWidgetWrite(role: role, taskCount: taskCount, nextTaskTitle: nextTask, workdayStatus: workdayStatus)
+                    let role          = (dict["role"]          as? String) ?? "guest"
+                    let taskCount     = (dict["taskCount"]     as? Int)    ?? 0
+                    let nextTask      = (dict["nextTask"]      as? String) ?? ""
+                    let workdayStatus = (dict["workdayStatus"] as? String) ?? "none"
+                    let orderTitle    = (dict["orderTitle"]    as? String) ?? ""
+                    let orderStatus   = (dict["orderStatus"]   as? String) ?? ""
+                    smlWidgetWrite(
+                        role: role,
+                        taskCount: taskCount,
+                        nextTaskTitle: nextTask,
+                        workdayStatus: workdayStatus,
+                        orderTitle: orderTitle,
+                        orderStatus: orderStatus
+                    )
                 }
+                return
+            }
+
+            if message.name == "smlLiveActivity" {
+                if #available(iOS 16.2, *) {
+                    guard let dict = message.body as? [String: Any] else { return }
+                    let action = (dict["action"] as? String) ?? ""
+                    NSLog("[LiveActivity] message received: action=\(action) body=\(dict)")
+                    let mgr    = SMLLiveActivityManager.shared
+                    let wv     = attachedWebView
+
+                    // Set token callback so any activity start/sync reports its push token.
+                    mgr.onTokenUpdate = { [weak self] type, token, orderId, isSandbox in
+                        guard let self else { return }
+                        if let webView = self.attachedWebView {
+                            self.registerLiveActivityToken(webView: webView, type: type, token: token, orderId: orderId, isSandbox: isSandbox)
+                        } else {
+                            // Save for registration on next didFinish.
+                            self.pendingLATokenType    = type
+                            self.pendingLATokenValue   = token
+                            self.pendingLATokenOrderId = orderId
+                            self.pendingLATokenSandbox = isSandbox
+                        }
+                    }
+
+                    switch action {
+                    case "workday.start":
+                        let name = (dict["workerName"] as? String) ?? "Worker"
+                        mgr.startWorkday(workerName: name)
+                    case "workday.sync":
+                        let name             = (dict["workerName"]    as? String) ?? "Worker"
+                        let adjustedStartRaw = dict["adjustedStart"]
+                        let adjustedStartUnix: Double = (adjustedStartRaw as? Double)
+                            ?? Double((adjustedStartRaw as? Int) ?? 0)
+                        let status           = (dict["status"]         as? String) ?? "open"
+                        let pauseStartRaw    = dict["pauseStart"]
+                        let pauseStartUnix: Double = (pauseStartRaw as? Double)
+                            ?? Double((pauseStartRaw as? Int) ?? 0)
+                        mgr.syncWorkday(workerName: name, adjustedStartUnix: adjustedStartUnix, status: status, pauseStartUnix: pauseStartUnix)
+                    case "workday.pause":
+                        mgr.pauseWorkday()
+                    case "workday.resume":
+                        let paused = (dict["totalPausedSeconds"] as? Int) ?? 0
+                        mgr.resumeWorkday(totalPausedSeconds: paused)
+                    case "workday.end":
+                        mgr.endWorkday()
+                        if let webView = wv {
+                            deleteLiveActivityToken(webView: webView, type: "workday", orderId: "")
+                        }
+                    case "order.start":
+                        let orderId     = (dict["orderId"]     as? String) ?? ""
+                        let serviceName = (dict["serviceName"] as? String) ?? "Service"
+                        let status      = (dict["status"]      as? String) ?? "pending"
+                        mgr.startOrder(orderId: orderId, serviceName: serviceName, status: status)
+                    case "order.sync":
+                        let orderId     = (dict["orderId"]     as? String) ?? ""
+                        let serviceName = (dict["serviceName"] as? String) ?? ""
+                        let status      = (dict["status"]      as? String) ?? "pending"
+                        mgr.syncOrder(orderId: orderId, serviceName: serviceName, status: status)
+                    case "order.update":
+                        let status = (dict["status"] as? String) ?? "pending"
+                        mgr.updateOrder(status: status)
+                    case "order.end":
+                        let orderId = (dict["orderId"] as? String) ?? ""
+                        mgr.endOrder(orderId: orderId)
+                        if let webView = wv {
+                            deleteLiveActivityToken(webView: webView, type: "order", orderId: orderId)
+                        }
+                    default: break
+                    }
+                }
+                return
+            }
+
+            if message.name == "smlConsole" {
+                NSLog("[JS] %@", "\(message.body)")
                 return
             }
 
@@ -491,6 +584,7 @@ extension WebView {
         // - После завершения загрузки синхронизирует bridge, cookies и whoami
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             didFinishOnce = true
+            NSLog("[didFinish] url=\(webView.url?.absoluteString ?? "nil")")
 
             DispatchQueue.main.async { [weak self, weak webView] in
                 guard let self, let webView else { return }
@@ -501,7 +595,145 @@ extension WebView {
                 self.requestWhoamiViaWebView(webView: webView)
                 self.maybePersistPendingLoginAfterSuccessfulNavigation(webView: webView)
                 self.handleLocationTracking(webView: webView)
+                self.requestLiveStatusSync(webView: webView)
+                self.flushPendingLAToken(webView: webView)
             }
+        }
+
+        // Назначение:
+        // - Отправляет отложенный push-токен Live Activity, если он был получен до загрузки страницы.
+        private func flushPendingLAToken(webView: WKWebView) {
+            guard !pendingLATokenValue.isEmpty else { return }
+            let type    = pendingLATokenType
+            let token   = pendingLATokenValue
+            let orderId = pendingLATokenOrderId
+            let sandbox = pendingLATokenSandbox
+            pendingLATokenType    = ""
+            pendingLATokenValue   = ""
+            pendingLATokenOrderId = ""
+            pendingLATokenSandbox = false
+            registerLiveActivityToken(webView: webView, type: type, token: token, orderId: orderId, isSandbox: sandbox)
+        }
+
+        // Назначение:
+        // - Регистрирует push-токен Live Activity на сервере через JS fetch.
+        func registerLiveActivityToken(webView: WKWebView, type: String, token: String, orderId: String, isSandbox: Bool) {
+            let host = (webView.url?.host ?? "").lowercased()
+            guard host == allowedHost || host.hasSuffix("." + allowedHost) else { return }
+            let typeJS    = jsString(type)
+            let tokenJS   = jsString(token)
+            let orderIdJS = jsString(orderId)
+            let sandboxJS = isSandbox ? "true" : "false"
+            let js = """
+            (function() {
+              var isSandbox = (window.SML_APP && window.SML_APP.isSandboxPush === true) ? true : \(sandboxJS);
+              fetch('/wp-json/sml/v1/live-activity/token', {
+                method: 'POST',
+                credentials: 'include',
+                cache: 'no-store',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({type: \(typeJS), token: \(tokenJS), order_id: \(orderIdJS), sandbox: isSandbox})
+              })
+              .then(function(r) { return r.json(); })
+              .catch(function(e) {});
+            })();
+            """
+            NSLog("[LiveActivity] registering token type=\(type) sandbox=\(isSandbox)")
+            webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+
+        // Назначение:
+        // - Удаляет push-токен Live Activity с сервера через JS fetch DELETE.
+        private func deleteLiveActivityToken(webView: WKWebView, type: String, orderId: String) {
+            let host = (webView.url?.host ?? "").lowercased()
+            guard host == allowedHost || host.hasSuffix("." + allowedHost) else { return }
+            var urlString = "/wp-json/sml/v1/live-activity/token?type=\(type)"
+            if !orderId.isEmpty {
+                urlString += "&order_id=\(orderId)"
+            }
+            let js = """
+            (function() {
+              fetch('\(urlString)', {method: 'DELETE', credentials: 'include', cache: 'no-store'})
+              .catch(function(e) {});
+            })();
+            """
+            webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+
+        // Назначение:
+        // - Запрашивает /sml/v1/live-status напрямую через URLSession,
+        //   копируя cookies из WKHTTPCookieStore (надёжнее чем JS fetch на iOS 26+).
+        private var lastLiveStatusAt: TimeInterval = 0
+        private let liveStatusMinInterval: TimeInterval = 10
+        private let liveStatusURL = URL(string: "https://stmaryslandscaping.ca/wp-json/sml/v1/live-status")!
+
+        private func requestLiveStatusSync(webView: WKWebView) {
+            let host = (webView.url?.host ?? "").lowercased()
+            guard host == allowedHost || host.hasSuffix("." + allowedHost) else { return }
+
+            let now = Date().timeIntervalSince1970
+            guard now - lastLiveStatusAt >= liveStatusMinInterval else { return }
+            lastLiveStatusAt = now
+            NSLog("[LiveSync] JS fetch starting")
+
+            // JS fetch работает в контексте WKWebView и автоматически использует сессионные cookies.
+            // Результат через smlLiveActivity + smlWidget message handlers.
+            // console.log перехватывается через smlConsole handler -> NSLog.
+            let js = """
+            (function() {
+              var log = function(m) {
+                try { window.webkit.messageHandlers.smlConsole.postMessage(m); } catch(e) {}
+              };
+              log('[LiveSync-JS] fetch start');
+              fetch('/wp-json/sml/v1/live-status?_t=' + Date.now(), {credentials: 'include', cache: 'no-store'})
+                .then(function(r) {
+                  log('[LiveSync-JS] status=' + r.status);
+                  return r.ok ? r.json() : null;
+                })
+                .then(function(d) {
+                  log('[LiveSync-JS] data=' + JSON.stringify(d));
+                  if (!d || !d.authenticated) { log('[LiveSync-JS] not auth'); return; }
+                  var b = window.webkit && window.webkit.messageHandlers;
+                  if (!b) { log('[LiveSync-JS] no handlers'); return; }
+
+                  if (b.smlWidget) {
+                    b.smlWidget.postMessage({
+                      role:          d.role,
+                      workdayStatus: d.workday_status,
+                      orderTitle:    d.order_title  || '',
+                      orderStatus:   d.order_status || '',
+                      taskCount:     d.task_count   || 0
+                    });
+                  }
+
+                  var ws = d.workday_status;
+                  if (ws === 'open' || ws === 'paused') {
+                    b.smlLiveActivity.postMessage({
+                      action:        'workday.sync',
+                      workerName:    d.worker_name     || '',
+                      adjustedStart: d.adjusted_start  || 0,
+                      pauseStart:    d.pause_start_unix || 0,
+                      status:        ws
+                    });
+                    log('[LiveSync-JS] workday.sync sent ws=' + ws);
+                  } else {
+                    b.smlLiveActivity.postMessage({ action: 'workday.end' });
+                  }
+
+                  var oi = d.order_id || '', os = d.order_status || '';
+                  if (oi && os && os !== 'completed' && os !== 'cancelled') {
+                    b.smlLiveActivity.postMessage({
+                      action: 'order.sync', orderId: oi,
+                      serviceName: d.order_title || '', status: os
+                    });
+                  } else if (os === 'completed' || os === 'cancelled') {
+                    b.smlLiveActivity.postMessage({ action: 'order.end', orderId: oi });
+                  }
+                })
+                .catch(function(e) { log('[LiveSync-JS] error: ' + e); });
+            })();
+            """
+            webView.evaluateJavaScript(js, completionHandler: nil)
         }
 
         // Назначение:

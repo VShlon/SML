@@ -2,10 +2,9 @@
 //  SMLWidgetShared.swift
 //  SML
 //
-//  Назначение:
-//  - Общий код между основным приложением и SMLWidget extension.
-//  - Читает и пишет данные через App Group UserDefaults.
-//  - TimelineEntry для WidgetKit.
+//  Общий код между основным приложением и SMLWidget extension.
+//  Читает и пишет данные через App Group UserDefaults.
+//  TimelineEntry для WidgetKit.
 //
 
 import WidgetKit
@@ -26,45 +25,79 @@ private enum WidgetKey {
     static let taskCount      = "sml.widget.taskCount"
     static let nextTask       = "sml.widget.nextTask"
     static let workdayStatus  = "sml.widget.workdayStatus"
+    static let orderTitle     = "sml.widget.orderTitle"
+    static let orderStatus    = "sml.widget.orderStatus"
     static let updatedAt      = "sml.widget.updatedAt"
 }
 
 // MARK: - Entry
 
-/// workdayStatus values: "none" | "active" | "paused" | "ended"
+/// role values:          "guest" | "client" | "worker" | "accountant" | "manager" | "administrator" | "owner"
+/// workdayStatus values: "none"  | "active" | "paused" | "ended"
+/// orderStatus values:   ""      | "pending" | "scheduled" | "in_progress" | "completed" | "cancelled"
 public struct SMLWidgetEntry: TimelineEntry {
     public let date: Date
     public let role: String
     public let taskCount: Int
     public let nextTaskTitle: String
     public let workdayStatus: String
+    public let orderTitle: String
+    public let orderStatus: String
 
     public static let placeholder = SMLWidgetEntry(
-        date: Date(),
-        role: "worker",
-        taskCount: 3,
-        nextTaskTitle: "123 Main St",
-        workdayStatus: "active"
+        date: Date(), role: "worker", taskCount: 3,
+        nextTaskTitle: "123 Main St", workdayStatus: "active",
+        orderTitle: "", orderStatus: ""
     )
 
     public static let guest = SMLWidgetEntry(
-        date: Date(),
-        role: "guest",
-        taskCount: 0,
-        nextTaskTitle: "",
-        workdayStatus: "none"
+        date: Date(), role: "guest", taskCount: 0,
+        nextTaskTitle: "", workdayStatus: "none",
+        orderTitle: "", orderStatus: ""
     )
+}
+
+// MARK: - Normalization
+
+private func normalizeRole(_ raw: String) -> String {
+    switch raw.lowercased() {
+    case "worker":                      return "worker"
+    case "accountant":                  return "accountant"
+    case "manager", "menager":          return "manager"
+    case "administrator", "admin":      return "administrator"
+    case "owner", "boss":               return "owner"
+    case "client":                      return "client"
+    default:                            return "guest"
+    }
+}
+
+private func normalizeWorkdayStatus(_ raw: String) -> String {
+    switch raw.lowercased() {
+    case "active", "open":              return "active"
+    case "paused":                      return "paused"
+    case "ended":                       return "ended"
+    default:                            return "none"   // "not_started", "", etc.
+    }
 }
 
 // MARK: - Write (called from main app)
 
-public func smlWidgetWrite(role: String, taskCount: Int, nextTaskTitle: String, workdayStatus: String = "none") {
+public func smlWidgetWrite(
+    role: String,
+    taskCount: Int = 0,
+    nextTaskTitle: String = "",
+    workdayStatus: String = "none",
+    orderTitle: String = "",
+    orderStatus: String = ""
+) {
     let ud = sharedDefaults
-    ud.set(role,            forKey: WidgetKey.role)
-    ud.set(taskCount,       forKey: WidgetKey.taskCount)
-    ud.set(nextTaskTitle,   forKey: WidgetKey.nextTask)
-    ud.set(workdayStatus,   forKey: WidgetKey.workdayStatus)
-    ud.set(Date().timeIntervalSince1970, forKey: WidgetKey.updatedAt)
+    ud.set(normalizeRole(role),              forKey: WidgetKey.role)
+    ud.set(taskCount,                        forKey: WidgetKey.taskCount)
+    ud.set(nextTaskTitle,                    forKey: WidgetKey.nextTask)
+    ud.set(normalizeWorkdayStatus(workdayStatus), forKey: WidgetKey.workdayStatus)
+    ud.set(orderTitle,                       forKey: WidgetKey.orderTitle)
+    ud.set(orderStatus,                      forKey: WidgetKey.orderStatus)
+    ud.set(Date().timeIntervalSince1970,     forKey: WidgetKey.updatedAt)
 
     if #available(iOS 14.0, *) {
         WidgetCenter.shared.reloadAllTimelines()
@@ -75,9 +108,13 @@ public func smlWidgetWrite(role: String, taskCount: Int, nextTaskTitle: String, 
 
 public func smlWidgetRead() -> SMLWidgetEntry {
     let ud = sharedDefaults
-    let role           = ud.string(forKey: WidgetKey.role)          ?? "guest"
-    let taskCount      = ud.integer(forKey: WidgetKey.taskCount)
-    let nextTask       = ud.string(forKey: WidgetKey.nextTask)       ?? ""
-    let workdayStatus  = ud.string(forKey: WidgetKey.workdayStatus)  ?? "none"
-    return SMLWidgetEntry(date: Date(), role: role, taskCount: taskCount, nextTaskTitle: nextTask, workdayStatus: workdayStatus)
+    return SMLWidgetEntry(
+        date:           Date(),
+        role:           ud.string(forKey: WidgetKey.role)         ?? "guest",
+        taskCount:      ud.integer(forKey: WidgetKey.taskCount),
+        nextTaskTitle:  ud.string(forKey: WidgetKey.nextTask)     ?? "",
+        workdayStatus:  ud.string(forKey: WidgetKey.workdayStatus) ?? "none",
+        orderTitle:     ud.string(forKey: WidgetKey.orderTitle)   ?? "",
+        orderStatus:    ud.string(forKey: WidgetKey.orderStatus)  ?? ""
+    )
 }

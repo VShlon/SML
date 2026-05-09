@@ -2,10 +2,8 @@
 //  SMLWidget.swift
 //  SMLWidget
 //
-//  Дизайн:
-//  - Цвет фона задаёт система (белый/тёмный по настройке телефона).
-//  - Верхняя часть: логотип + статус рабочего дня (для staff).
-//  - Нижняя часть: 4 иконки вкладок, как в приложении, по роли.
+//  Адаптивный виджет: разный контент для гостей, клиентов, рабочих и менеджеров.
+//  Размеры: small, medium, large.
 //
 
 import WidgetKit
@@ -27,15 +25,18 @@ struct SMLWidgetProvider: TimelineProvider {
     }
 }
 
-// MARK: - Brand color (used only for accents, not background)
+// MARK: - Brand tokens
 
-private let brandGreen = Color(red: 67 / 255.0, green: 130 / 255.0, blue: 57 / 255.0)
+private let brandGreen = Color(red: 67/255.0, green: 130/255.0, blue: 57/255.0)
+private let warmBg     = Color(red: 243/255.0, green: 240/255.0, blue: 232/255.0)
+private let warmSurf   = Color(red: 247/255.0, green: 243/255.0, blue: 234/255.0)
+private let ink        = Color(red: 18/255.0,  green: 22/255.0,  blue: 18/255.0)
 
-// MARK: - iOS 16/17 containerBackground (system colour — no override)
+// MARK: - containerBackground helper
 
 private extension View {
     @ViewBuilder
-    func smlSystemBackground() -> some View {
+    func smlBg() -> some View {
         if #available(iOSApplicationExtension 17.0, *) {
             self.containerBackground(.background, for: .widget)
         } else {
@@ -44,83 +45,89 @@ private extension View {
     }
 }
 
+// MARK: - Role helpers
+
+private let staffRoles: Set<String> = ["worker", "accountant", "manager", "administrator", "owner"]
+
+private func isStaff(_ role: String) -> Bool { staffRoles.contains(role) }
+
 // MARK: - Tab descriptor
 
-private struct WidgetTab {
+private struct WTab {
     let icon: String
     let label: String
     let url: URL
 }
 
-private func tabs(for role: String) -> [WidgetTab] {
+private func tabs(for role: String) -> [WTab] {
     switch role {
     case "worker":
         return [
-            .init(icon: "house",            label: "Home",     url: URL(string: "sml://home")!),
-            .init(icon: "calendar",         label: "Workday",  url: URL(string: "sml://workday")!),
-            .init(icon: "checklist",        label: "Tasks",    url: URL(string: "sml://tasks-today")!),
-            .init(icon: "exclamationmark.bubble", label: "Report", url: URL(string: "sml://report")!),
+            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
+            .init(icon: "calendar",                 label: "Workday",   url: URL(string: "sml://workday")!),
+            .init(icon: "checklist",                label: "Tasks",     url: URL(string: "sml://tasks-today")!),
+            .init(icon: "exclamationmark.bubble",   label: "Report",    url: URL(string: "sml://report")!),
         ]
     case "accountant":
         return [
-            .init(icon: "house",            label: "Home",     url: URL(string: "sml://home")!),
-            .init(icon: "calendar.badge.clock", label: "Billing", url: URL(string: "sml://billing")!),
-            .init(icon: "briefcase",        label: "Workday",  url: URL(string: "sml://workday")!),
-            .init(icon: "dollarsign.square", label: "Payroll", url: URL(string: "sml://payroll")!),
+            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
+            .init(icon: "calendar.badge.clock",     label: "Billing",   url: URL(string: "sml://billing")!),
+            .init(icon: "calendar",                 label: "Workday",   url: URL(string: "sml://workday")!),
+            .init(icon: "dollarsign.square",        label: "Payroll",   url: URL(string: "sml://payroll")!),
         ]
-    case "admin":
+    case "manager":
         return [
-            .init(icon: "house",            label: "Home",     url: URL(string: "sml://home")!),
-            .init(icon: "plus.square",      label: "Create",   url: URL(string: "sml://create")!),
-            .init(icon: "rectangle.3.group", label: "Workspace", url: URL(string: "sml://workspace")!),
-            .init(icon: "tray.full",        label: "All Tasks", url: URL(string: "sml://all-tasks")!),
+            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
+            .init(icon: "plus.square.fill",         label: "Create",    url: URL(string: "sml://create")!),
+            .init(icon: "calendar",                 label: "Workday",   url: URL(string: "sml://workday")!),
+            .init(icon: "tray.full",                label: "Tasks",     url: URL(string: "sml://all-tasks")!),
+        ]
+    case "administrator":
+        return [
+            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
+            .init(icon: "plus.square.fill",         label: "Create",    url: URL(string: "sml://create")!),
+            .init(icon: "rectangle.3.group.fill",   label: "Workspace", url: URL(string: "sml://workspace")!),
+            .init(icon: "tray.full",                label: "All Tasks", url: URL(string: "sml://all-tasks")!),
         ]
     case "owner":
         return [
-            .init(icon: "person.crop.circle", label: "Account", url: URL(string: "sml://account")!),
-            .init(icon: "plus.square",      label: "Create",   url: URL(string: "sml://create")!),
-            .init(icon: "briefcase",        label: "Workday",  url: URL(string: "sml://workday")!),
-            .init(icon: "tray.full",        label: "All Tasks", url: URL(string: "sml://all-tasks")!),
-        ]
-    case "menager":
-        return [
-            .init(icon: "house",            label: "Home",     url: URL(string: "sml://home")!),
-            .init(icon: "plus.square",      label: "Create",   url: URL(string: "sml://create")!),
-            .init(icon: "briefcase",        label: "Workday",  url: URL(string: "sml://workday")!),
-            .init(icon: "tray.full",        label: "All Tasks", url: URL(string: "sml://all-tasks")!),
+            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
+            .init(icon: "plus.square.fill",         label: "Create",    url: URL(string: "sml://create")!),
+            .init(icon: "calendar",                 label: "Workday",   url: URL(string: "sml://workday")!),
+            .init(icon: "tray.full",                label: "All Tasks", url: URL(string: "sml://all-tasks")!),
         ]
     case "client":
         return [
-            .init(icon: "house",            label: "Home",     url: URL(string: "sml://home")!),
-            .init(icon: "list.bullet.clipboard", label: "Requests", url: URL(string: "sml://requests")!),
-            .init(icon: "paperplane",       label: "New Request", url: URL(string: "sml://quote")!),
-            .init(icon: "person.crop.circle", label: "Account", url: URL(string: "sml://account")!),
+            .init(icon: "house.fill",                    label: "Home",        url: URL(string: "sml://home")!),
+            .init(icon: "list.bullet.clipboard.fill",    label: "Requests",    url: URL(string: "sml://requests")!),
+            .init(icon: "paperplane.fill",               label: "New Request", url: URL(string: "sml://quote")!),
+            .init(icon: "person.crop.circle.fill",       label: "Account",     url: URL(string: "sml://account")!),
         ]
     default: // guest
         return [
-            .init(icon: "house",            label: "Home",     url: URL(string: "sml://home")!),
-            .init(icon: "person",           label: "Sign In",  url: URL(string: "sml://account")!),
-            .init(icon: "paperplane",       label: "Get Quote", url: URL(string: "sml://quote")!),
-            .init(icon: "leaf",             label: "Services", url: URL(string: "sml://services")!),
+            .init(icon: "paperplane.fill",          label: "Get Quote", url: URL(string: "sml://quote")!),
+            .init(icon: "leaf.fill",                label: "Services",  url: URL(string: "sml://services")!),
+            .init(icon: "house.fill",               label: "Home",      url: URL(string: "sml://home")!),
+            .init(icon: "person.fill",              label: "Sign In",   url: URL(string: "sml://account")!),
         ]
     }
 }
 
-// MARK: - Workday status badge
+// MARK: - Workday badge
 
 private struct WorkdayBadge: View {
-    let status: String  // "none" | "active" | "paused" | "ended"
+    let status: String
 
-    private var dot: Color {
+    private var dotColor: Color {
         switch status {
         case "active": return .green
         case "paused": return .orange
         case "ended":  return .gray
-        default:       return .red
+        default:       return Color.primary.opacity(0.25)
         }
     }
 
-    private var label: String {
+    private var text: String {
         switch status {
         case "active": return "Working"
         case "paused": return "On Break"
@@ -131,34 +138,73 @@ private struct WorkdayBadge: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Circle()
-                .fill(dot)
-                .frame(width: 8, height: 8)
-            Text(label)
-                .font(.system(size: 13, weight: .semibold))
+            Circle().fill(dotColor).frame(width: 7, height: 7)
+            Text(text)
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.primary)
         }
     }
 }
 
-// MARK: - Tab bar row (bottom of medium widget)
+// MARK: - Order progress (4 steps)
 
-private struct WidgetTabBar: View {
-    let tabs: [WidgetTab]
+private struct OrderProgress: View {
+    let status: String // pending | scheduled | in_progress | completed
+
+    private var step: Int {
+        switch status {
+        case "pending":     return 0
+        case "scheduled":   return 1
+        case "in_progress": return 2
+        case "completed":   return 3
+        default:            return 0
+        }
+    }
+
+    private let labels = ["Submitted", "Scheduled", "In Progress", "Done"]
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(tabs, id: \.label) { tab in
+            ForEach(0..<4, id: \.self) { i in
+                VStack(spacing: 3) {
+                    Circle()
+                        .fill(i <= step ? brandGreen : Color.primary.opacity(0.15))
+                        .frame(width: 8, height: 8)
+                    Text(labels[i])
+                        .font(.system(size: 8, weight: i == step ? .semibold : .regular))
+                        .foregroundStyle(i == step ? brandGreen : Color.primary.opacity(0.40))
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                }
+                if i < 3 {
+                    Rectangle()
+                        .fill(i < step ? brandGreen : Color.primary.opacity(0.15))
+                        .frame(height: 1.5)
+                        .offset(y: -6)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Tab bar row
+
+private struct WidgetTabBar: View {
+    let items: [WTab]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(items, id: \.label) { tab in
                 Link(destination: tab.url) {
                     VStack(spacing: 3) {
                         Image(systemName: tab.icon)
-                            .font(.system(size: 17, weight: .medium))
+                            .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(brandGreen)
                         Text(tab.label)
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                            .minimumScaleFactor(0.65)
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -167,163 +213,440 @@ private struct WidgetTabBar: View {
     }
 }
 
-// MARK: - Staff status content
+// MARK: - Primary tap URL
 
-private let staffRoles: Set<String> = ["worker", "accountant", "owner", "menager", "admin"]
-
-private func isStaff(_ role: String) -> Bool { staffRoles.contains(role) }
+private func primaryURL(for role: String) -> URL {
+    switch role {
+    case "guest":          return URL(string: "sml://quote")!
+    case "client":         return URL(string: "sml://requests")!
+    case "worker":         return URL(string: "sml://tasks-today")!
+    default:               return URL(string: "sml://workday")!
+    }
+}
 
 // MARK: - Small widget
 
 struct SMLSmallWidgetView: View {
-    let entry: SMLWidgetEntry
+    let e: SMLWidgetEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Logo
-            Image("LaunchLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 22)
+        Link(destination: primaryURL(for: e.role)) {
+            VStack(alignment: .leading, spacing: 0) {
 
-            Spacer()
+                Image("SMLLeaf")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 28, height: 28)
 
-            if isStaff(entry.role) {
-                WorkdayBadge(status: entry.workdayStatus)
+                Spacer()
 
-                if entry.role == "worker" && entry.taskCount > 0 {
-                    Text("\(entry.taskCount) task\(entry.taskCount == 1 ? "" : "s") today")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                if e.role == "client" {
+                    clientBody
+                } else if e.role == "worker" {
+                    workerBody
+                } else if isStaff(e.role) {
+                    staffBody
+                } else {
+                    guestBody
                 }
-            } else if entry.role == "client" {
-                Text("My Requests")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.primary)
-                Text("Tap to view")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("St. Marys\nLandscaping")
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
+        .smlBg()
+        .widgetURL(primaryURL(for: e.role))
+    }
+
+    // Client: active request status
+    private var clientBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if !e.orderTitle.isEmpty && !e.orderStatus.isEmpty && e.orderStatus != "completed" && e.orderStatus != "cancelled" {
+                Text("Active Request")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(brandGreen)
+                    .tracking(0.5)
+                Text(e.orderTitle)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.primary)
-                Text("Tap to open")
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                OrderProgress(status: e.orderStatus)
+                    .padding(.top, 4)
+            } else {
+                Text("My\nRequests")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .lineSpacing(1)
+                Text("Tap to view all")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .padding(.top, 2)
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .smlSystemBackground()
-        .widgetURL(tabs(for: entry.role).first?.url ?? URL(string: "sml://home")!)
+    }
+
+    // Worker: workday status + task count
+    private var workerBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            WorkdayBadge(status: e.workdayStatus)
+            Text("\(e.taskCount)")
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(brandGreen)
+                .lineLimit(1)
+            Text(e.taskCount == 1 ? "task today" : "tasks today")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // Other staff: workday + role
+    private var staffBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            WorkdayBadge(status: e.workdayStatus)
+            Text(staffRoleLabel(e.role))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Text("Tap to open account")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // Guest
+    private var guestBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Free\nEstimate")
+                .font(.system(size: 21, weight: .bold))
+                .foregroundStyle(brandGreen)
+                .lineSpacing(1)
+            Text("Tap to request")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
 // MARK: - Medium widget
 
 struct SMLMediumWidgetView: View {
-    let entry: SMLWidgetEntry
-    private var tabList: [WidgetTab] { tabs(for: entry.role) }
+    let e: SMLWidgetEntry
+    private var tabList: [WTab] { tabs(for: e.role) }
 
     var body: some View {
         VStack(spacing: 0) {
+            topBar
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
 
-            // Top: logo + status / info
-            HStack(alignment: .top, spacing: 10) {
-                Image("LaunchLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 26)
+            middleContent
+                .padding(.horizontal, 14)
+                .padding(.top, 8)
 
-                Spacer()
+            Spacer(minLength: 4)
 
-                if isStaff(entry.role) {
-                    WorkdayBadge(status: entry.workdayStatus)
-                } else if entry.role == "client" {
-                    Text("Client")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Sign in to get started")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-
-            // Middle: role info
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    if entry.role == "worker" {
-                        Text("\(entry.taskCount)")
-                            .font(.system(size: 36, weight: .bold, design: .rounded))
-                            .foregroundStyle(brandGreen)
-                        Text(entry.taskCount == 1 ? "task today" : "tasks today")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        if !entry.nextTaskTitle.isEmpty {
-                            Text(entry.nextTaskTitle)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    } else if isStaff(entry.role) {
-                        Text("St. Marys Landscaping")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.primary)
-                        Text(roleName(entry.role))
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    } else if entry.role == "client" {
-                        Text("Welcome back")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.primary)
-                        Text("View your requests below")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Professional landscaping")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.primary)
-                        Text("Get a free quote today")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 8)
-
-            Spacer()
-
-            // Divider
             Rectangle()
                 .fill(Color.primary.opacity(0.08))
                 .frame(height: 0.5)
                 .padding(.horizontal, 10)
 
-            // Bottom: tab bar
-            WidgetTabBar(tabs: tabList)
+            WidgetTabBar(items: tabList)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 9)
         }
-        .smlSystemBackground()
+        .smlBg()
+    }
+
+    private var topBar: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image("SMLLeaf")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 24, height: 24)
+            Text("St. Marys Landscaping")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+            Spacer()
+            if isStaff(e.role) {
+                WorkdayBadge(status: e.workdayStatus)
+            } else if e.role == "client" {
+                Text("My Account")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Since 1971")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var middleContent: some View {
+        if e.role == "client" {
+            clientMiddle
+        } else if e.role == "worker" {
+            workerMiddle
+        } else if isStaff(e.role) {
+            staffMiddle
+        } else {
+            guestMiddle
+        }
+    }
+
+    // Client: show active order or CTA
+    private var clientMiddle: some View {
+        HStack(alignment: .top, spacing: 0) {
+            VStack(alignment: .leading, spacing: 5) {
+                if !e.orderTitle.isEmpty && !e.orderStatus.isEmpty && e.orderStatus != "cancelled" {
+                    Text(e.orderTitle)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    OrderProgress(status: e.orderStatus)
+                        .frame(maxWidth: 220)
+                } else {
+                    Text("No active requests")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.primary)
+                    Text("Tap Requests or New Request below")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+    }
+
+    // Worker: task count + next task
+    private var workerMiddle: some View {
+        HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .lastTextBaseline, spacing: 4) {
+                    Text("\(e.taskCount)")
+                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .foregroundStyle(brandGreen)
+                    Text(e.taskCount == 1 ? "task today" : "tasks today")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                if !e.nextTaskTitle.isEmpty {
+                    Text("Next: \(e.nextTaskTitle)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+        }
+    }
+
+    // Staff (manager, accountant, owner, administrator)
+    private var staffMiddle: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(staffRoleLabel(e.role))
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.primary)
+                Text("Use tabs below for quick access")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+    }
+
+    // Guest
+    private var guestMiddle: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Get a Free Estimate")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(brandGreen)
+                Text("Landscape Design · Build · Care")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
     }
 }
 
-private func roleName(_ role: String) -> String {
+// MARK: - Large widget
+
+struct SMLLargeWidgetView: View {
+    let e: SMLWidgetEntry
+    private var tabList: [WTab] { tabs(for: e.role) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack(spacing: 10) {
+                Image("SMLLeaf")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 28, height: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("St. Marys Landscaping")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.primary)
+                    Text(isStaff(e.role) ? staffRoleLabel(e.role) : (e.role == "client" ? "Client Account" : "Landscaping Services"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if isStaff(e.role) {
+                    WorkdayBadge(status: e.workdayStatus)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+
+            Rectangle()
+                .fill(Color.primary.opacity(0.07))
+                .frame(height: 0.5)
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+
+            // Main body
+            largeBody
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+
+            Spacer(minLength: 8)
+
+            // Quick links grid 2x2
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(tabList, id: \.label) { tab in
+                    Link(destination: tab.url) {
+                        HStack(spacing: 8) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(brandGreen)
+                                .frame(width: 20)
+                            Text(tab.label)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 9)
+                        .background(Color.primary.opacity(0.05))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+        }
+        .smlBg()
+    }
+
+    @ViewBuilder
+    private var largeBody: some View {
+        if e.role == "client" {
+            clientLarge
+        } else if e.role == "worker" {
+            workerLarge
+        } else if isStaff(e.role) {
+            staffLarge
+        } else {
+            guestLarge
+        }
+    }
+
+    private var clientLarge: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !e.orderTitle.isEmpty && e.orderStatus != "cancelled" {
+                Text("Active Request")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(brandGreen)
+                    .tracking(0.8)
+                Text(e.orderTitle)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                OrderProgress(status: e.orderStatus)
+                    .padding(.top, 4)
+            } else {
+                Text("No active requests")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.primary)
+                Text("Submit a service or material request and track it in real time.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+            }
+        }
+    }
+
+    private var workerLarge: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            WorkdayBadge(status: e.workdayStatus)
+            HStack(alignment: .lastTextBaseline, spacing: 6) {
+                Text("\(e.taskCount)")
+                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                    .foregroundStyle(brandGreen)
+                Text(e.taskCount == 1 ? "task\ntoday" : "tasks\ntoday")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(1)
+            }
+            if !e.nextTaskTitle.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(brandGreen)
+                    Text(e.nextTaskTitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    private var staffLarge: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            WorkdayBadge(status: e.workdayStatus)
+            Text(staffRoleLabel(e.role))
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.primary)
+            Text("Use the quick links below to navigate.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var guestLarge: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Get a\nFree Estimate")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(brandGreen)
+                .lineSpacing(2)
+            Text("Professional landscaping for St. Marys & surrounding areas. Since 1971.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineSpacing(2)
+        }
+    }
+}
+
+// MARK: - Role label helper
+
+private func staffRoleLabel(_ role: String) -> String {
     switch role {
-    case "accountant": return "Accountant"
-    case "admin":      return "Administrator"
-    case "owner":      return "Owner"
-    case "menager":    return "Manager"
-    default:           return ""
+    case "worker":         return "Worker"
+    case "accountant":     return "Accountant"
+    case "manager":        return "Manager"
+    case "administrator":  return "Administrator"
+    case "owner":          return "Owner"
+    default:               return "Staff"
     }
 }
 
-// MARK: - Entry view
+// MARK: - Entry view dispatcher
 
 struct SMLWidgetEntryView: View {
     @Environment(\.widgetFamily) var family
@@ -331,9 +654,10 @@ struct SMLWidgetEntryView: View {
 
     var body: some View {
         switch family {
-        case .systemSmall:  SMLSmallWidgetView(entry: entry)
-        case .systemMedium: SMLMediumWidgetView(entry: entry)
-        default:            SMLSmallWidgetView(entry: entry)
+        case .systemSmall:  SMLSmallWidgetView(e: entry)
+        case .systemMedium: SMLMediumWidgetView(e: entry)
+        case .systemLarge:  SMLLargeWidgetView(e: entry)
+        default:            SMLSmallWidgetView(e: entry)
         }
     }
 }
@@ -348,7 +672,7 @@ struct SMLWidget: Widget {
             SMLWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("St. Marys Landscaping")
-        .description("Quick access to your workday and tasks.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .description("Quick access to your workday, tasks and requests.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }

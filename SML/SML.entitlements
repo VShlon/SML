@@ -8,12 +8,9 @@
 	<array>
 		<string>webcredentials:stmaryslandscaping.ca</string>
 	</array>
-<<<<<<< HEAD
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.ca.stmaryslandscaping.app</string>
 	</array>
-=======
->>>>>>> main
 </dict>
 </plist>

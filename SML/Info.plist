@@ -27,5 +27,9 @@
     <string>Choose photos from your library to attach to your service request.</string>
     <key>NSCameraUsageDescription</key>
     <string>Take a photo to attach to your service request.</string>
+    <key>NSSupportsLiveActivities</key>
+    <true/>
+    <key>NSSupportsLiveActivitiesFrequentUpdates</key>
+    <true/>
 </dict>
 </plist>

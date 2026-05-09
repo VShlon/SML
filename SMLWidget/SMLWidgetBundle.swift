@@ -10,5 +10,9 @@ import SwiftUI
 struct SMLWidgetBundle: WidgetBundle {
     var body: some Widget {
         SMLWidget()
+        if #available(iOSApplicationExtension 16.2, *) {
+            WorkdayLiveActivity()
+            OrderLiveActivity()
+        }
     }
 }
