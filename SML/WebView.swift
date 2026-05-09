@@ -877,6 +877,10 @@ extension WebView {
             let isReleaseBuild = registrationContext.isReleaseBuild
             let usesProductionPush = (pushEnvironment == "production")
 
+            // Persist sandbox flag so SMLLiveActivityManager can read it before the webview loads.
+            UserDefaults(suiteName: "group.ca.stmaryslandscaping.app")?
+                .set(!usesProductionPush, forKey: "sml_is_sandbox_push")
+
             let page = webView.url?.absoluteString ?? ""
 
             if !force {

@@ -104,7 +104,12 @@ struct WorkdayLiveActivity: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    if context.state.status != "ended" {
+                    if context.state.status == "paused" {
+                        Text(context.state.pauseStart, style: .timer)
+                            .font(.system(size: 20, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.orange)
+                            .monospacedDigit()
+                    } else if context.state.status != "ended" {
                         Text(context.state.adjustedStart, style: .timer)
                             .font(.system(size: 20, weight: .bold, design: .monospaced))
                             .foregroundStyle(brandGreen)
