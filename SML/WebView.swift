@@ -325,16 +325,18 @@ extension WebView {
                     let wv     = attachedWebView
 
                     // Set token callback so any activity start/sync reports its push token.
+                    // Called from a Task (background thread) - must dispatch to main.
                     mgr.onTokenUpdate = { [weak self] type, token, orderId, isSandbox in
-                        guard let self else { return }
-                        if let webView = self.attachedWebView {
-                            self.registerLiveActivityToken(webView: webView, type: type, token: token, orderId: orderId, isSandbox: isSandbox)
-                        } else {
-                            // Save for registration on next didFinish.
-                            self.pendingLATokenType    = type
-                            self.pendingLATokenValue   = token
-                            self.pendingLATokenOrderId = orderId
-                            self.pendingLATokenSandbox = isSandbox
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self else { return }
+                            if let webView = self.attachedWebView {
+                                self.registerLiveActivityToken(webView: webView, type: type, token: token, orderId: orderId, isSandbox: isSandbox)
+                            } else {
+                                self.pendingLATokenType    = type
+                                self.pendingLATokenValue   = token
+                                self.pendingLATokenOrderId = orderId
+                                self.pendingLATokenSandbox = isSandbox
+                            }
                         }
                     }
 
