@@ -529,16 +529,6 @@ extension WebView {
                 return
             }
 
-            // Intercept workday-end-blocked-by-active-task redirect and show a native alert
-            // with a direct button to open the task, instead of the generic web notice.
-            if let comps = URLComponents(url: u, resolvingAgainstBaseURL: false),
-               comps.queryItems?.first(where: { $0.name == "sml_notice" && $0.value == "workday_end_active_task" }) != nil {
-                let taskId = comps.queryItems?.first(where: { $0.name == "task_id" })?.value ?? ""
-                decisionHandler(.cancel)
-                showActiveTaskBlockAlert(webView: webView, taskId: taskId)
-                return
-            }
-
             if isExternalURL(u) {
                 if navigationAction.navigationType == .linkActivated || navigationAction.targetFrame == nil {
                     openExternally(u)
@@ -1343,33 +1333,6 @@ extension WebView {
             promptToEnableBiometricLogin(using: pendingCredentialSave)
         }
 
-        // Назначение:
-        // - Показывает нативный alert когда рабочий день нельзя завершить из-за активной задачи.
-        //   Кнопка "Open Task" открывает задачу прямо в приложении.
-        private func showActiveTaskBlockAlert(webView: WKWebView, taskId: String) {
-            guard let host = hostViewController else { return }
-            guard host.presentedViewController == nil else { return }
-
-            let alert = UIAlertController(
-                title: "Active Task",
-                message: "You have a task in progress. Complete or cancel it before ending your workday.",
-                preferredStyle: .alert
-            )
-
-            if !taskId.isEmpty {
-                alert.addAction(UIAlertAction(title: "Open Task", style: .default) { [weak webView] _ in
-                    guard let webView else { return }
-                    let taskURL = URL(string: "https://stmaryslandscaping.ca/tasks-today/?view_task=\(taskId)")!
-                    webView.load(URLRequest(url: taskURL))
-                })
-            }
-
-            alert.addAction(UIAlertAction(title: "OK", style: taskId.isEmpty ? .default : .cancel))
-
-            DispatchQueue.main.async {
-                host.present(alert, animated: true)
-            }
-        }
 
         // Назначение:
         // - Показывает alert с предложением включить Face ID логин

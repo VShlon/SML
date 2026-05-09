@@ -5,6 +5,9 @@
 //  Manages starting, updating and ending Live Activities.
 //  Called from WebView.swift when JS posts smlLiveActivity messages.
 //
+//  ⚠️ TARGET MEMBERSHIP: этот файл должен быть только в таргете SML.
+//     SMLWidget extension не использует LiveActivity напрямую.
+//
 
 import ActivityKit
 import Foundation

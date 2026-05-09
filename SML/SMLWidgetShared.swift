@@ -6,6 +6,11 @@
 //  Читает и пишет данные через App Group UserDefaults.
 //  TimelineEntry для WidgetKit.
 //
+//  ⚠️ TARGET MEMBERSHIP: этот файл должен быть в ОБОИХ таргетах:
+//     - SML (основное приложение)
+//     - SMLWidget (widget extension)
+//  В Xcode: выбери файл -> File Inspector -> Target Membership -> поставь галочки на оба.
+//
 
 import WidgetKit
 import Foundation
