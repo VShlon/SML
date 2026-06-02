@@ -104,7 +104,8 @@ final class WebViewController: UIViewController {
             wv.configuration.defaultWebpagePreferences.preferredContentMode = .mobile
         }
 
-        wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1 SMLApp-iOS/1.0"
+        let _appVer = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0"
+        wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1 SMLApp-iOS/\(_appVer)"
 
         view.addSubview(wv)
 
@@ -161,15 +162,17 @@ final class WebViewController: UIViewController {
 
         let base = initialURL ?? URL(string: "https://stmaryslandscaping.ca/")!
 
+        // Use .reloadIgnoringLocalCacheData so every app launch fetches fresh
+        // content from the server - no reinstall needed to pick up site updates.
         if let cmd = initialCommand {
             coordinator.markCommandHandled(cmd.id)
             if coordinator.isExternalURL(cmd.url) {
-                wv.load(URLRequest(url: base))
+                wv.load(URLRequest(url: base, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60))
             } else {
-                wv.load(URLRequest(url: cmd.url))
+                wv.load(URLRequest(url: cmd.url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60))
             }
         } else {
-            wv.load(URLRequest(url: base))
+            wv.load(URLRequest(url: base, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60))
         }
     }
 }
@@ -224,12 +227,10 @@ extension WebView {
         private weak var locationWebView: WKWebView?
 
         deinit {
+            liveStatusTimer?.invalidate()
+            liveStatusTimer = nil
+            NotificationCenter.default.removeObserver(self)
             if isWatchingLocation {
-                NotificationCenter.default.removeObserver(
-                    self,
-                    name: LocationBridge.didUpdateNotification,
-                    object: nil
-                )
                 LocationBridge.shared.stopWatching()
             }
         }
@@ -620,6 +621,9 @@ extension WebView {
                 self.maybePersistPendingLoginAfterSuccessfulNavigation(webView: webView)
                 self.handleLocationTracking(webView: webView)
                 self.requestLiveStatusSync(webView: webView)
+                self.lastPageLoadAt = Date().timeIntervalSince1970
+                self.startLiveStatusPolling()
+                self.registerForegroundObserverIfNeeded()
                 self.flushPendingLAToken(webView: webView)
             }
         }
@@ -690,6 +694,157 @@ extension WebView {
         private var lastLiveStatusAt: TimeInterval = 0
         private let liveStatusMinInterval: TimeInterval = 10
         private let liveStatusURL = URL(string: "https://stmaryslandscaping.ca/wp-json/sml/v1/live-status")!
+
+        // Background timer: polls live-status every 30 s so the Live Activity ends
+        // even when the user stays on the same page without navigating.
+        private var liveStatusTimer: Timer?
+
+        // Tracks when the page was last fully loaded, to decide whether a
+        // foreground-return should trigger a full reload or just a live-status sync.
+        private var lastPageLoadAt: TimeInterval = 0
+
+        // How long the app must be in the background before we do a full reload.
+        private let foregroundReloadMinInterval: TimeInterval = 300 // 5 minutes
+
+        private func startLiveStatusPolling() {
+            guard liveStatusTimer == nil else { return }
+            liveStatusTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    guard let wv = self.attachedWebView else {
+                        NSLog("[LiveSync] timer fired - no attached webView, skipping")
+                        return
+                    }
+                    NSLog("[LiveSync] timer fired - requesting sync")
+                    self.requestLiveStatusSync(webView: wv)
+                }
+            }
+        }
+
+        private var foregroundObserverRegistered = false
+
+        // Records when the app last went to background so we can calculate
+        // how long it was absent before returning to foreground.
+        private var lastBackgroundAt: TimeInterval = 0
+
+        private func registerForegroundObserverIfNeeded() {
+            guard !foregroundObserverRegistered else { return }
+            foregroundObserverRegistered = true
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(appWillEnterForeground),
+                name: UIApplication.willEnterForegroundNotification,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(appDidEnterBackground),
+                name: UIApplication.didEnterBackgroundNotification,
+                object: nil
+            )
+        }
+
+        @objc private func appDidEnterBackground() {
+            lastBackgroundAt = Date().timeIntervalSince1970
+        }
+
+        // Prevents double-reload when both time threshold and version change fire together.
+        private var foregroundReloadTriggered = false
+
+        // Called when the app returns to foreground.
+        // 1. Always syncs live-status (widget + Livestroka).
+        // 2. Always checks site version - reloads if version changed on server.
+        // 3. Also reloads if app was in background for 5+ minutes (time-based).
+        @objc private func appWillEnterForeground() {
+            guard let wv = attachedWebView else { return }
+            let now = Date().timeIntervalSince1970
+            foregroundReloadTriggered = false
+
+            // Reset the live-status throttle so the foreground call is never skipped.
+            lastLiveStatusAt = 0
+            requestLiveStatusSync(webView: wv)
+
+            // Version check: reload only if absent 60+ seconds (avoids disrupting
+        // workers who briefly switch apps and come right back).
+        let absenceSeconds = lastBackgroundAt > 0 ? (now - lastBackgroundAt) : 0
+        checkSiteVersionAndReloadIfNeeded(webView: wv, absenceSeconds: absenceSeconds)
+
+            // Time-based reload: if absent 5+ minutes, also reload immediately.
+            if lastPageLoadAt > 0 && (now - lastPageLoadAt) >= foregroundReloadMinInterval {
+                let host = (wv.url?.host ?? "").lowercased()
+                if (host == allowedHost || host.hasSuffix("." + allowedHost)),
+                   let currentURL = wv.url {
+                    NSLog("[Foreground] reloading page after long background: \(currentURL)")
+                    foregroundReloadTriggered = true
+                    wv.load(URLRequest(url: currentURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60))
+                }
+            }
+        }
+
+        // MARK: - Site version check
+
+        private static let appVersionURL  = URL(string: "https://stmaryslandscaping.ca/wp-json/sml/v1/app-version")!
+        private static let siteVersionKey = "sml.site.cached_version"
+
+        // Compares the server's current theme version against the last-seen version.
+        // Only reloads if the user was in the background for at least 60 seconds -
+        // avoids disrupting a worker who briefly switches apps and comes right back.
+        private func checkSiteVersionAndReloadIfNeeded(webView: WKWebView, absenceSeconds: TimeInterval) {
+            let host = (webView.url?.host ?? "").lowercased()
+            guard host == allowedHost || host.hasSuffix("." + allowedHost) else { return }
+            guard let currentURL = webView.url else { return }
+
+            var req = URLRequest(
+                url: Self.appVersionURL,
+                cachePolicy: .reloadIgnoringLocalCacheData,
+                timeoutInterval: 10
+            )
+            if let cookies = HTTPCookieStorage.shared.cookies(for: Self.appVersionURL) {
+                for (field, value) in HTTPCookie.requestHeaderFields(with: cookies) {
+                    req.setValue(value, forHTTPHeaderField: field)
+                }
+            }
+
+            URLSession.shared.dataTask(with: req) { [weak self, weak webView] data, _, _ in
+                guard
+                    let self,
+                    let data,
+                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                    let newVersion = json["version"] as? String
+                else { return }
+
+                let ud            = UserDefaults.standard
+                let cachedVersion = ud.string(forKey: Self.siteVersionKey) ?? ""
+                let versionChanged = !cachedVersion.isEmpty && cachedVersion != newVersion
+
+                // Always save the current version so the next comparison is accurate.
+                if cachedVersion != newVersion {
+                    ud.set(newVersion, forKey: Self.siteVersionKey)
+                }
+
+                // Only reload if both: version changed AND user was away 60+ seconds.
+                guard versionChanged else { return }
+                guard absenceSeconds >= 60 else {
+                    NSLog("[VersionCheck] site updated %@ -> %@ but absence %.0fs < 60s - reload deferred", cachedVersion, newVersion, absenceSeconds)
+                    return
+                }
+
+                NSLog("[VersionCheck] site updated %@ -> %@, absence %.0fs >= 60s - reloading", cachedVersion, newVersion, absenceSeconds)
+                DispatchQueue.main.async { [weak self, weak webView] in
+                    guard let self, let webView else { return }
+                    guard !self.foregroundReloadTriggered else {
+                        NSLog("[VersionCheck] reload skipped - already triggered this cycle")
+                        return
+                    }
+                    self.foregroundReloadTriggered = true
+                    webView.load(URLRequest(
+                        url: currentURL,
+                        cachePolicy: .reloadIgnoringLocalCacheData,
+                        timeoutInterval: 60
+                    ))
+                }
+            }.resume()
+        }
 
         private func requestLiveStatusSync(webView: WKWebView) {
             let host = (webView.url?.host ?? "").lowercased()
@@ -1464,6 +1619,7 @@ extension WebView {
             } else {
                 if isWatchingLocation {
                     isWatchingLocation = false
+                    // Remove only the location observer, keep foreground observer.
                     NotificationCenter.default.removeObserver(
                         self,
                         name: LocationBridge.didUpdateNotification,

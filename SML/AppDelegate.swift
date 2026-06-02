@@ -16,6 +16,7 @@
 
 import UIKit
 import UserNotifications
+import BackgroundTasks
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
@@ -26,6 +27,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
         let center = UNUserNotificationCenter.current()
         center.delegate = self
+
+        // Register background refresh task BEFORE app finishes launching (iOS requirement).
+        SMLBackgroundRefresh.register()
+        SMLBackgroundRefresh.scheduleNext()
 
         registerForPushIfNeeded(application: application)
 

@@ -20,7 +20,9 @@ struct SMLWidgetProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SMLWidgetEntry>) -> Void) {
         let entry = smlWidgetRead()
-        let next  = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
+        // 5-minute refresh so stale App Group data is replaced quickly after the app
+        // returns to foreground and writes fresh data.
+        let next  = Calendar.current.date(byAdding: .minute, value: 5, to: Date()) ?? Date()
         completion(Timeline(entries: [entry], policy: .after(next)))
     }
 }
@@ -451,7 +453,9 @@ struct SMLMediumWidgetView: View {
                 .foregroundStyle(.primary)
             Spacer()
             if isStaff(e.role) {
-                WorkdayBadge(status: e.workdayStatus)
+                Link(destination: smlURL("workday")) {
+                    WorkdayBadge(status: e.workdayStatus)
+                }
             } else if e.role == "client" {
                 Text("My Account")
                     .font(.system(size: 11, weight: .medium))
@@ -503,23 +507,27 @@ struct SMLMediumWidgetView: View {
         }
     }
 
-    // Worker: task count + task list (up to 3)
+    // Worker: task count + task list (up to 5)
     private var workerMiddle: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .lastTextBaseline, spacing: 4) {
-                    Text("\(e.taskCount)")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(brandGreen)
-                    Text(e.taskCount == 1 ? "task today" : "tasks today")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
+                Link(destination: smlURL("workday")) {
+                    HStack(alignment: .lastTextBaseline, spacing: 4) {
+                        Text("\(e.taskCount)")
+                            .font(.system(size: 30, weight: .bold, design: .rounded))
+                            .foregroundStyle(brandGreen)
+                        Text(e.taskCount == 1 ? "task today" : "tasks today")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                ForEach(e.tasks.prefix(3)) { task in
-                    TaskRow(task: task)
+                ForEach(e.tasks.prefix(5)) { task in
+                    Link(destination: smlURL("tasks-today")) {
+                        TaskRow(task: task)
+                    }
                 }
-                if e.tasks.count > 3 {
-                    Text("+ \(e.tasks.count - 3) more")
+                if e.tasks.count > 5 {
+                    Text("+ \(e.tasks.count - 5) more")
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                 } else if e.tasks.isEmpty && !e.nextTaskTitle.isEmpty {
@@ -588,7 +596,9 @@ struct SMLLargeWidgetView: View {
                 }
                 Spacer()
                 if isStaff(e.role) {
-                    WorkdayBadge(status: e.workdayStatus)
+                    Link(destination: smlURL("workday")) {
+                        WorkdayBadge(status: e.workdayStatus)
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -681,27 +691,28 @@ struct SMLLargeWidgetView: View {
 
     private var workerLarge: some View {
         VStack(alignment: .leading, spacing: 6) {
-            WorkdayBadge(status: e.workdayStatus)
-            HStack(alignment: .lastTextBaseline, spacing: 6) {
-                Text("\(e.taskCount)")
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
-                    .foregroundStyle(brandGreen)
-                Text(e.taskCount == 1 ? "task today" : "tasks today")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+            Link(destination: smlURL("workday")) {
+                WorkdayBadge(status: e.workdayStatus)
+            }
+            Link(destination: smlURL("workday")) {
+                HStack(alignment: .lastTextBaseline, spacing: 6) {
+                    Text("\(e.taskCount)")
+                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .foregroundStyle(brandGreen)
+                    Text(e.taskCount == 1 ? "task today" : "tasks today")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
             }
             if !e.tasks.isEmpty {
                 Rectangle()
                     .fill(Color.primary.opacity(0.07))
                     .frame(height: 0.5)
                     .padding(.vertical, 2)
-                ForEach(e.tasks.prefix(6)) { task in
-                    TaskRow(task: task)
-                }
-                if e.tasks.count > 6 {
-                    Text("+ \(e.tasks.count - 6) more")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
+                ForEach(e.tasks) { task in
+                    Link(destination: smlURL("tasks-today")) {
+                        TaskRow(task: task)
+                    }
                 }
             } else if !e.nextTaskTitle.isEmpty {
                 HStack(spacing: 6) {

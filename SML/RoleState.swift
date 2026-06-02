@@ -378,7 +378,19 @@ final class RoleState: ObservableObject {
         mode = newMode
         wpRole = newRole
         persistAuthorized(mode: newMode, wpRole: newRole)
-        smlWidgetWrite(role: newRole, taskCount: 0, nextTaskTitle: "")
+        // Preserve existing task/order data - only update the role so the full
+        // live-status write that follows shortly isn't preceded by a 0-task flash.
+        let cur = smlWidgetRead()
+        smlWidgetWrite(
+            role: newRole,
+            taskCount: cur.taskCount,
+            nextTaskTitle: cur.nextTaskTitle,
+            tasks: cur.tasks,
+            orders: cur.orders,
+            workdayStatus: cur.workdayStatus,
+            orderTitle: cur.orderTitle,
+            orderStatus: cur.orderStatus
+        )
     }
 
     private func applyGuest(clearPersisted: Bool) {
@@ -456,7 +468,18 @@ final class RoleState: ObservableObject {
         // Sync widget so it shows the correct role immediately without waiting
         // for the JS bridge — the guard in applyAuthorized would skip this write
         // since mode already equals persisted at that point.
-        smlWidgetWrite(role: restoredRole, taskCount: 0, nextTaskTitle: "")
+        // Preserve existing task/order data so a cold app launch doesn't flash 0 tasks.
+        let cur = smlWidgetRead()
+        smlWidgetWrite(
+            role: restoredRole,
+            taskCount: cur.taskCount,
+            nextTaskTitle: cur.nextTaskTitle,
+            tasks: cur.tasks,
+            orders: cur.orders,
+            workdayStatus: cur.workdayStatus,
+            orderTitle: cur.orderTitle,
+            orderStatus: cur.orderStatus
+        )
     }
 
     private func persistedAuthorizedMode() -> Mode? {
