@@ -881,7 +881,11 @@ struct ContentView: View {
             return .left1
 
         case "tasks-today":
-            return mode == .worker ? .center : .left1
+            switch mode {
+            case .worker:               return .center   // dedicated tasks-today tab
+            case .admin, .owner, .menager: return .right1  // Tasks tab (all-tasks) for staff
+            default:                    return .left1
+            }
 
         case "workday":
             switch mode {
