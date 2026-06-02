@@ -307,8 +307,7 @@ private func primaryURL(for role: String) -> URL {
     switch role {
     case "guest":   return smlURL("quote")
     case "client":  return smlURL("requests")
-    case "worker":  return smlURL("tasks-today")
-    default:        return smlURL("workday")
+    default:        return smlURL("workday")   // worker, manager, accountant, administrator, owner
     }
 }
 

@@ -52,14 +52,12 @@ enum SMLBackgroundRefresh {
         }
     }
 
-    // MARK: - Task handler
+    // MARK: - Fetch and write (shared logic)
 
-    private static func handleTask(_ task: BGAppRefreshTask) {
-        NSLog("[BGRefresh] task started")
-
-        // Re-schedule immediately so iOS knows we want recurring access.
-        scheduleNext()
-
+    // Fetches live-status from the server and writes the result to the App Group.
+    // Called from the BGAppRefreshTask handler, foreground return, and silent push.
+    // completion(true) = data written; completion(false) = skipped (auth/network error).
+    static func fetchAndWrite(completion: ((Bool) -> Void)? = nil) {
         var req = URLRequest(
             url: liveStatusURL,
             cachePolicy: .reloadIgnoringLocalCacheData,
@@ -73,30 +71,28 @@ enum SMLBackgroundRefresh {
             }
         }
 
-        let dataTask = URLSession.shared.dataTask(with: req) { data, response, error in
+        URLSession.shared.dataTask(with: req) { data, response, error in
             // Network error - leave App Group untouched.
             guard let data, error == nil else {
                 NSLog("[BGRefresh] network error: %@", error?.localizedDescription ?? "nil")
-                task.setTaskCompleted(success: false)
+                completion?(false)
                 return
             }
 
             // Non-200 (redirect to login, 401, 5xx) - leave App Group untouched.
-            // Expired sessions must not wipe the widget data.
             if let http = response as? HTTPURLResponse, http.statusCode != 200 {
                 NSLog("[BGRefresh] HTTP %d - skipping App Group write", http.statusCode)
-                task.setTaskCompleted(success: false)
+                completion?(false)
                 return
             }
 
-            // authenticated:false means PHP responded but session is expired.
-            // Still do not overwrite App Group so the widget keeps its last data.
+            // authenticated:false means session is expired - do not wipe widget data.
             guard
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 (json["authenticated"] as? Bool) == true
             else {
                 NSLog("[BGRefresh] not authenticated or bad JSON - skipping App Group write")
-                task.setTaskCompleted(success: false)
+                completion?(false)
                 return
             }
 
@@ -141,15 +137,27 @@ enum SMLBackgroundRefresh {
             )
 
             NSLog("[BGRefresh] widget updated: role=%@ tasks=%d status=%@", role, taskCount, workdayStatus)
-            task.setTaskCompleted(success: true)
+            completion?(true)
+        }.resume()
+    }
+
+    // MARK: - Task handler
+
+    private static func handleTask(_ task: BGAppRefreshTask) {
+        NSLog("[BGRefresh] task started")
+
+        // Re-schedule immediately so iOS knows we want recurring access.
+        scheduleNext()
+
+        fetchAndWrite { success in
+            task.setTaskCompleted(success: success)
         }
 
-        // iOS will kill the task after a short window - cancel the network call cleanly.
+        // iOS will kill the task after a short window - signal expiry cleanly.
+        // fetchAndWrite's URLSession task will be cancelled by the system automatically.
         task.expirationHandler = {
             NSLog("[BGRefresh] task expired before completion")
-            dataTask.cancel()
+            task.setTaskCompleted(success: false)
         }
-
-        dataTask.resume()
     }
 }

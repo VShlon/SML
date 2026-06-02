@@ -121,7 +121,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        completionHandler(.noData)
+        // Silent push (content-available: 1) - refresh the widget for all staff.
+        NSLog("[Push] silent push received - refreshing widget")
+        SMLBackgroundRefresh.fetchAndWrite { success in
+            completionHandler(success ? .newData : .noData)
+        }
     }
 
     func application(

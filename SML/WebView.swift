@@ -758,6 +758,11 @@ extension WebView {
         // 2. Always checks site version - reloads if version changed on server.
         // 3. Also reloads if app was in background for 5+ minutes (time-based).
         @objc private func appWillEnterForeground() {
+            // Immediately refresh the widget via a direct HTTP fetch (no WKWebView needed).
+            // This runs before any WebView check so the widget updates even if the WebView
+            // is not ready yet (cold start, slow load, etc.).
+            SMLBackgroundRefresh.fetchAndWrite()
+
             guard let wv = attachedWebView else { return }
             let now = Date().timeIntervalSince1970
             foregroundReloadTriggered = false
