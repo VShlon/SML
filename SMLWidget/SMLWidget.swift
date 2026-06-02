@@ -281,12 +281,12 @@ private struct WidgetTabBar: View {
         HStack(spacing: 0) {
             ForEach(items) { tab in
                 Link(destination: tab.url) {
-                    VStack(spacing: 3) {
+                    VStack(spacing: 2) {
                         Image(systemName: tab.icon)
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(brandGreen)
                         Text(tab.label)
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.system(size: 8, weight: .medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.65)
@@ -422,13 +422,13 @@ struct SMLMediumWidgetView: View {
         VStack(spacing: 0) {
             topBar
                 .padding(.horizontal, 14)
-                .padding(.top, 12)
+                .padding(.top, 10)
 
             middleContent
                 .padding(.horizontal, 14)
-                .padding(.top, 8)
+                .padding(.top, 6)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 0)
 
             Rectangle()
                 .fill(Color.primary.opacity(0.08))
@@ -437,7 +437,7 @@ struct SMLMediumWidgetView: View {
 
             WidgetTabBar(items: tabList)
                 .padding(.horizontal, 10)
-                .padding(.vertical, 9)
+                .padding(.vertical, 7)
         }
         .smlBg()
     }
@@ -447,7 +447,7 @@ struct SMLMediumWidgetView: View {
             Image("SMLLeaf")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 24, height: 24)
+                .frame(width: 22, height: 22)
             Text("St. Marys Landscaping")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.primary)
@@ -507,14 +507,14 @@ struct SMLMediumWidgetView: View {
         }
     }
 
-    // Worker: task count + task list (up to 5)
+    // Worker: task count + task list (up to 3)
     private var workerMiddle: some View {
         HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Link(destination: smlURL("workday")) {
                     HStack(alignment: .lastTextBaseline, spacing: 4) {
                         Text("\(e.taskCount)")
-                            .font(.system(size: 30, weight: .bold, design: .rounded))
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
                             .foregroundStyle(brandGreen)
                         Text(e.taskCount == 1 ? "task today" : "tasks today")
                             .font(.system(size: 11, weight: .medium))
