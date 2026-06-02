@@ -827,8 +827,12 @@ struct ContentView: View {
 
         if showMoreSheet { showMoreSheet = false }
 
+        // Always suppress the tab-selection reset so onChange(of: selected) does NOT
+        // call resetTabToRoot (which would load the tab's default URL and override
+        // the navigation command below).
+        suppressReloadOnce = true
+
         // Navigate the target tab's WebView to the correct URL, not just switch tabs.
-        // Without this, the WebView stays on whatever page it was last on.
         if let dest = widgetDestURL(for: host) {
             let cmd = WebNavigationCommand(id: UUID(), url: dest)
             switch target {
@@ -838,8 +842,6 @@ struct ContentView: View {
             case .right1: right1Command = cmd
             default: break
             }
-        } else {
-            suppressReloadOnce = true
         }
 
         selected = target
