@@ -160,6 +160,8 @@ public func smlWidgetWrite(
         ud.set(encoded, forKey: WidgetKey.orders)
     }
 
+    NSLog("[Widget] writing to AppGroup: tasks=%d role=%@", tasks.count, normalizeRole(role))
+
     // Flush to disk before signalling WidgetKit - the widget extension
     // runs in a separate process and reads the plist directly.
     ud.synchronize()

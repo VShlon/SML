@@ -475,7 +475,7 @@ struct SMLMediumWidgetView: View {
     private var middleContent: some View {
         if e.role == "client" {
             clientMiddle
-        } else if e.role == "worker" || (isStaff(e.role) && !e.tasks.isEmpty) {
+        } else if e.role == "worker" || (isStaff(e.role) && e.taskCount > 0) {
             workerMiddle
         } else if isStaff(e.role) {
             staffMiddle
@@ -524,20 +524,21 @@ struct SMLMediumWidgetView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                ForEach(e.tasks.prefix(3)) { task in
-                    Link(destination: smlURL("tasks-today")) {
-                        TaskRow(task: task)
-                    }
-                }
-                if e.tasks.count > 3 {
-                    Text("+ \(e.tasks.count - 3) more")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                } else if e.tasks.isEmpty && !e.nextTaskTitle.isEmpty {
-                    Text("Next: \(e.nextTaskTitle)")
+                if e.tasks.isEmpty {
+                    Text("Loading tasks...")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                } else {
+                    ForEach(e.tasks.prefix(3)) { task in
+                        Link(destination: smlURL("tasks-today")) {
+                            TaskRow(task: task)
+                        }
+                    }
+                    if e.tasks.count > 3 {
+                        Text("+ \(e.tasks.count - 3) more")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
                 }
             }
             Spacer()
@@ -652,7 +653,7 @@ struct SMLLargeWidgetView: View {
     private var largeBody: some View {
         if e.role == "client" {
             clientLarge
-        } else if e.role == "worker" || (isStaff(e.role) && !e.tasks.isEmpty) {
+        } else if e.role == "worker" || (isStaff(e.role) && e.taskCount > 0) {
             workerLarge
         } else if isStaff(e.role) {
             staffLarge
@@ -707,25 +708,19 @@ struct SMLLargeWidgetView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            if !e.tasks.isEmpty {
-                Rectangle()
-                    .fill(Color.primary.opacity(0.07))
-                    .frame(height: 0.5)
-                    .padding(.vertical, 2)
+            Rectangle()
+                .fill(Color.primary.opacity(0.07))
+                .frame(height: 0.5)
+                .padding(.vertical, 2)
+            if e.tasks.isEmpty {
+                Text("Loading tasks...")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            } else {
                 ForEach(e.tasks) { task in
                     Link(destination: smlURL("tasks-today")) {
                         TaskRow(task: task)
                     }
-                }
-            } else if !e.nextTaskTitle.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(brandGreen)
-                    Text(e.nextTaskTitle)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
             }
         }

@@ -325,6 +325,8 @@ extension WebView {
                             )
                         }
                     }
+                    NSLog("[Widget] received from JS: tasks=%d role=%@ workday=%@",
+                          widgetTasks.count, role, workdayStatus)
                     smlWidgetWrite(
                         role: role,
                         taskCount: taskCount,
