@@ -20,9 +20,12 @@ struct SMLWidgetProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SMLWidgetEntry>) -> Void) {
         let entry = smlWidgetRead()
+        NSLog("[SMLWidget] getTimeline: role=%@ tasks=%d workday=%@ isPlaceholder=%d",
+              entry.role, entry.taskCount, entry.workdayStatus,
+              entry.tasks == SMLWidgetEntry.placeholder.tasks ? 1 : 0)
         // 5-minute refresh so stale App Group data is replaced quickly after the app
         // returns to foreground and writes fresh data.
-        let next  = Calendar.current.date(byAdding: .minute, value: 5, to: Date()) ?? Date()
+        let next = Calendar.current.date(byAdding: .minute, value: 5, to: Date()) ?? Date()
         completion(Timeline(entries: [entry], policy: .after(next)))
     }
 }
@@ -511,7 +514,7 @@ struct SMLMediumWidgetView: View {
     private var workerMiddle: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Link(destination: smlURL("workday")) {
+                Link(destination: smlURL("tasks-today")) {
                     HStack(alignment: .lastTextBaseline, spacing: 4) {
                         Text("\(e.taskCount)")
                             .font(.system(size: 22, weight: .bold, design: .rounded))
@@ -694,7 +697,7 @@ struct SMLLargeWidgetView: View {
             Link(destination: smlURL("workday")) {
                 WorkdayBadge(status: e.workdayStatus)
             }
-            Link(destination: smlURL("workday")) {
+            Link(destination: smlURL("tasks-today")) {
                 HStack(alignment: .lastTextBaseline, spacing: 6) {
                     Text("\(e.taskCount)")
                         .font(.system(size: 38, weight: .bold, design: .rounded))

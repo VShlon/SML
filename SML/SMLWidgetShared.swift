@@ -19,9 +19,18 @@ import Foundation
 
 private let appGroupID = "group.ca.stmaryslandscaping.app"
 
-private var sharedDefaults: UserDefaults {
-    UserDefaults(suiteName: appGroupID) ?? .standard
-}
+// Singleton instance — created once per process.
+// A computed var (old approach) created a new instance on every call; while
+// UserDefaults is internally cached, a stored instance is more reliable and
+// avoids edge cases where suiteName init briefly returns nil under memory pressure.
+private let sharedDefaults: UserDefaults = {
+    if let suite = UserDefaults(suiteName: appGroupID) {
+        NSLog("[SMLWidget] App Group UserDefaults OK: %@", appGroupID)
+        return suite
+    }
+    NSLog("[SMLWidget] WARNING: App Group '%@' not accessible - falling back to .standard. Widget will show placeholder until App Group is configured.", appGroupID)
+    return .standard
+}()
 
 // MARK: - Keys
 
@@ -164,13 +173,26 @@ public func smlWidgetWrite(
 
 public func smlWidgetRead() -> SMLWidgetEntry {
     let ud = sharedDefaults
+    let updatedAt = ud.double(forKey: WidgetKey.updatedAt)
+
+    // updatedAt == 0 means the main app has never written to this App Group domain.
+    // This happens on first install (before the app runs) OR when the App Group
+    // falls back to .standard (entitlement missing). Show placeholder so the widget
+    // displays meaningful content instead of a blank/guest screen.
+    if updatedAt == 0 {
+        NSLog("[SMLWidget] smlWidgetRead: updatedAt=0 - App Group empty or not accessible, returning placeholder")
+        return .placeholder
+    }
+
     let tasks: [WidgetTask]
     if let data = ud.data(forKey: WidgetKey.tasks),
        let decoded = try? JSONDecoder().decode([WidgetTask].self, from: data) {
         tasks = decoded
     } else {
+        NSLog("[SMLWidget] smlWidgetRead: tasks JSON decode failed or missing")
         tasks = []
     }
+
     let orders: [WidgetOrder]
     if let data = ud.data(forKey: WidgetKey.orders),
        let decoded = try? JSONDecoder().decode([WidgetOrder].self, from: data) {
@@ -178,15 +200,23 @@ public func smlWidgetRead() -> SMLWidgetEntry {
     } else {
         orders = []
     }
+
+    let role          = ud.string(forKey: WidgetKey.role)          ?? "guest"
+    let taskCount     = ud.integer(forKey: WidgetKey.taskCount)
+    let workdayStatus = ud.string(forKey: WidgetKey.workdayStatus) ?? "none"
+
+    NSLog("[SMLWidget] smlWidgetRead: role=%@ tasks=%d workday=%@ updatedAt=%.0f",
+          role, taskCount, workdayStatus, updatedAt)
+
     return SMLWidgetEntry(
         date:           Date(),
-        role:           ud.string(forKey: WidgetKey.role)          ?? "guest",
-        taskCount:      ud.integer(forKey: WidgetKey.taskCount),
-        nextTaskTitle:  ud.string(forKey: WidgetKey.nextTask)      ?? "",
+        role:           role,
+        taskCount:      taskCount,
+        nextTaskTitle:  ud.string(forKey: WidgetKey.nextTask)  ?? "",
         tasks:          tasks,
         orders:         orders,
-        workdayStatus:  ud.string(forKey: WidgetKey.workdayStatus) ?? "none",
-        orderTitle:     ud.string(forKey: WidgetKey.orderTitle)    ?? "",
-        orderStatus:    ud.string(forKey: WidgetKey.orderStatus)   ?? ""
+        workdayStatus:  workdayStatus,
+        orderTitle:     ud.string(forKey: WidgetKey.orderTitle)  ?? "",
+        orderStatus:    ud.string(forKey: WidgetKey.orderStatus) ?? ""
     )
 }
