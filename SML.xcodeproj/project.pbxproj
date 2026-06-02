@@ -38,6 +38,7 @@
 		F4264A0F34A5185FA539BC40 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E445B850E1CED029E85D300E /* Foundation.framework */; };
 		FF1122334455667788AABBCC /* iPadRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF1122334455667788AABB00 /* iPadRootView.swift */; };
 		FF778899001122334455AA01 /* SMLLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF778899001122334455AA00 /* SMLLiveActivity.swift */; };
+		A1B2C3D4E5F6000011223345 /* SMLBackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000011223344 /* SMLBackgroundRefresh.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -92,6 +93,7 @@
 		D5DCC5482F85F6900071FD65 /* QuoteRequestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteRequestView.swift; sourceTree = "<group>"; };
 		DD55EE66FF7788990011220F /* SMLLiveActivityShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLLiveActivityShared.swift; sourceTree = "<group>"; };
 		E445B850E1CED029E85D300E /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		A1B2C3D4E5F6000011223344 /* SMLBackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLBackgroundRefresh.swift; sourceTree = "<group>"; };
 		EE66FF778899001122330010 /* SMLLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMLLiveActivityManager.swift; sourceTree = "<group>"; };
 		F8682DD32D90E119B9FDB122 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		FF1122334455667788AABB00 /* iPadRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadRootView.swift; sourceTree = "<group>"; };
@@ -181,6 +183,7 @@
 				CC44DD55EE66FF7788990010 /* SMLIntents.swift */,
 				DD55EE66FF7788990011220F /* SMLLiveActivityShared.swift */,
 				EE66FF778899001122330010 /* SMLLiveActivityManager.swift */,
+				A1B2C3D4E5F6000011223344 /* SMLBackgroundRefresh.swift */,
 				D5A7A21B2F64B0F700BC6815 /* Launch Screen.storyboard */,
 				D5A7A2132F64B07100BC6815 /* PushState.swift */,
 				D591D1742F64B7F1003A8934 /* RoleState.swift */,
@@ -333,6 +336,7 @@
 				D5A7A2042F64AF2A00BC6815 /* SMLApp.swift in Sources */,
 				D5A7A2142F64B07100BC6815 /* PushState.swift in Sources */,
 				B4BE104C5AFFCEDCC121645C /* SMLWidgetShared.swift in Sources */,
+				A1B2C3D4E5F6000011223345 /* SMLBackgroundRefresh.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
