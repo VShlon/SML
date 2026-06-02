@@ -521,13 +521,13 @@ struct SMLMediumWidgetView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                ForEach(e.tasks.prefix(5)) { task in
+                ForEach(e.tasks.prefix(3)) { task in
                     Link(destination: smlURL("tasks-today")) {
                         TaskRow(task: task)
                     }
                 }
-                if e.tasks.count > 5 {
-                    Text("+ \(e.tasks.count - 5) more")
+                if e.tasks.count > 3 {
+                    Text("+ \(e.tasks.count - 3) more")
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                 } else if e.tasks.isEmpty && !e.nextTaskTitle.isEmpty {

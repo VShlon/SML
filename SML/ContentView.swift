@@ -53,6 +53,7 @@ struct ContentView: View {
     @State private var suppressReloadOnce: Bool = false
     @State private var needsHomeRefreshAfterExternal: Bool = false
     @State private var pendingSiriRoute: String? = nil
+    @State private var pendingWidgetRoute: String? = nil
 
     private let allowedHost = "stmaryslandscaping.ca"
 
@@ -100,6 +101,13 @@ struct ContentView: View {
             guard oldMode != newMode else { return }
 
             applyTabBarAppearance()
+
+            // If a widget route was stored while the role was still loading, apply it now.
+            if oldMode == .guest, newMode != .guest, let route = pendingWidgetRoute {
+                pendingWidgetRoute = nil
+                applyWidgetRoute(route, mode: newMode)
+                return
+            }
 
             // If a Siri route was stored while the role was still unknown, apply it now.
             if oldMode == .guest, newMode != .guest, let route = pendingSiriRoute {
@@ -803,13 +811,59 @@ struct ContentView: View {
 
     private func routeFromWidget(_ url: URL, mode: RoleState.Mode) {
         guard url.scheme == "sml" else { return }
+        let host = url.host ?? ""
 
-        let target = widgetTab(for: url.host ?? "", mode: mode)
+        // Role not loaded yet - defer until mode is known (same pattern as Siri routes).
+        if mode == .guest {
+            pendingWidgetRoute = host
+            return
+        }
+
+        applyWidgetRoute(host, mode: mode)
+    }
+
+    private func applyWidgetRoute(_ host: String, mode: RoleState.Mode) {
+        let target = widgetTab(for: host, mode: mode)
 
         if showMoreSheet { showMoreSheet = false }
-        suppressReloadOnce = true
+
+        // Navigate the target tab's WebView to the correct URL, not just switch tabs.
+        // Without this, the WebView stays on whatever page it was last on.
+        if let dest = widgetDestURL(for: host) {
+            let cmd = WebNavigationCommand(id: UUID(), url: dest)
+            switch target {
+            case .left1:  left1Command  = cmd
+            case .left2:  left2Command  = cmd
+            case .center: centerCommand = cmd
+            case .right1: right1Command = cmd
+            default: break
+            }
+        } else {
+            suppressReloadOnce = true
+        }
+
         selected = target
         lastNonMoreTab = target
+    }
+
+    // Maps a widget sml:// host to its canonical web URL.
+    private func widgetDestURL(for host: String) -> URL? {
+        switch host {
+        case "tasks-today": return URL(string: "https://stmaryslandscaping.ca/tasks-today/")
+        case "workday":     return URL(string: "https://stmaryslandscaping.ca/account-workday/")
+        case "home":        return URL(string: "https://stmaryslandscaping.ca/")
+        case "requests":    return URL(string: "https://stmaryslandscaping.ca/my-requests/")
+        case "quote":       return URL(string: "https://stmaryslandscaping.ca/new-request/")
+        case "account":     return URL(string: "https://stmaryslandscaping.ca/account/")
+        case "workspace":   return URL(string: "https://stmaryslandscaping.ca/workspace/")
+        case "all-tasks":   return URL(string: "https://stmaryslandscaping.ca/all-tasks/")
+        case "create":      return URL(string: "https://stmaryslandscaping.ca/create-task/")
+        case "report":      return URL(string: "https://stmaryslandscaping.ca/account-report/")
+        case "services":    return URL(string: "https://stmaryslandscaping.ca/services/")
+        case "billing":     return URL(string: "https://stmaryslandscaping.ca/monthly-billing/")
+        case "payroll":     return URL(string: "https://stmaryslandscaping.ca/payroll-review/")
+        default:            return nil
+        }
     }
 
     // Direct mapping: sml:// host -> Tab per role layout.
