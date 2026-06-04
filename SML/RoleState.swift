@@ -104,7 +104,12 @@ final class RoleState: ObservableObject {
 
                 if let http = resp as? HTTPURLResponse {
                     if http.statusCode == 401 || http.statusCode == 403 {
-                        self.applyGuest(clearPersisted: true)
+                        // Do not drop to guest on a URLSession 401 - the auth cookie may not
+                        // be in HTTPCookieStorage.shared yet (still being synced from WKWebView
+                        // by syncCookiesToSharedStorage). Real logout is confirmed only by the
+                        // JS bridge (setRoleFromBridge), which runs inside WKWebView and always
+                        // has the correct session cookie.
+                        self.keepAuthorizedRoleIfPossible()
                         return
                     }
 
