@@ -162,17 +162,18 @@ final class WebViewController: UIViewController {
 
         let base = initialURL ?? URL(string: "https://stmaryslandscaping.ca/")!
 
-        // Use .reloadIgnoringLocalCacheData so every app launch fetches fresh
-        // content from the server - no reinstall needed to pick up site updates.
+        // Use default cache policy so CSS/JS assets are served from WKWebView cache
+        // (fast launch). The version-check in checkSiteVersionAndReloadIfNeeded will
+        // do a full reloadIgnoringLocalCacheData only when the site version changes.
         if let cmd = initialCommand {
             coordinator.markCommandHandled(cmd.id)
             if coordinator.isExternalURL(cmd.url) {
-                wv.load(URLRequest(url: base, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60))
+                wv.load(URLRequest(url: base, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 60))
             } else {
-                wv.load(URLRequest(url: cmd.url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60))
+                wv.load(URLRequest(url: cmd.url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 60))
             }
         } else {
-            wv.load(URLRequest(url: base, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60))
+            wv.load(URLRequest(url: base, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 60))
         }
     }
 }
@@ -776,14 +777,17 @@ extension WebView {
         let absenceSeconds = lastBackgroundAt > 0 ? (now - lastBackgroundAt) : 0
         checkSiteVersionAndReloadIfNeeded(webView: wv, absenceSeconds: absenceSeconds)
 
-            // Time-based reload: if absent 5+ minutes, also reload immediately.
+            // Time-based reload: if absent 5+ minutes, reload with default cache policy
+            // so CSS/JS are served from WKWebView cache (fast). Only a version change
+            // (handled by checkSiteVersionAndReloadIfNeeded above) triggers a full
+            // cache-busting reload to pick up new site deployments.
             if lastPageLoadAt > 0 && (now - lastPageLoadAt) >= foregroundReloadMinInterval {
                 let host = (wv.url?.host ?? "").lowercased()
                 if (host == allowedHost || host.hasSuffix("." + allowedHost)),
                    let currentURL = wv.url {
                     NSLog("[Foreground] reloading page after long background: \(currentURL)")
                     foregroundReloadTriggered = true
-                    wv.load(URLRequest(url: currentURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60))
+                    wv.load(URLRequest(url: currentURL, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 60))
                 }
             }
         }
