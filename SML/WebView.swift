@@ -961,44 +961,25 @@ extension WebView {
                   !!document.querySelector('a[href*="logout"], a[href*="log-out"], a[href*="my-account"]');
               } catch (e) {}
 
-              function postFallback() {
-                try {
-                  window.webkit.messageHandlers.smlWhoami.postMessage({
-                    authenticated: authGuess,
-                    current_path: (location && location.pathname) ? location.pathname : '',
-                    href: (location && location.href) ? location.href : '',
-                    body_class: bodyClass
-                  });
-                } catch (e) {}
-              }
+              fetch('/wp-json/sml/v1/whoami', { credentials: 'include' })
+                .then(function (response) {
+                  return response.json().catch(function () { return null; });
+                })
+                .then(function (data) {
+                  if (!data) { return; }
+                  try {
+                    data.current_path = (location && location.pathname) ? location.pathname : '';
+                    data.href = (location && location.href) ? location.href : '';
+                    data.body_class = bodyClass;
 
-              try {
-                fetch('/wp-json/sml/v1/whoami', { credentials: 'include' })
-                  .then(function (response) {
-                    return response.json().catch(function () { return {}; });
-                  })
-                  .then(function (data) {
-                    try {
-                      data = data || {};
-                      data.current_path = (location && location.pathname) ? location.pathname : '';
-                      data.href = (location && location.href) ? location.href : '';
-                      data.body_class = bodyClass;
-
-                      if (typeof data.authenticated === 'undefined' && typeof data.logged_in === 'undefined') {
-                        data.authenticated = authGuess;
-                      }
-
-                      window.webkit.messageHandlers.smlWhoami.postMessage(data);
-                    } catch (e) {
-                      postFallback();
+                    if (typeof data.authenticated === 'undefined' && typeof data.logged_in === 'undefined') {
+                      data.authenticated = authGuess;
                     }
-                  })
-                  .catch(function () {
-                    postFallback();
-                  });
-              } catch (e) {
-                postFallback();
-              }
+
+                    window.webkit.messageHandlers.smlWhoami.postMessage(data);
+                  } catch (e) {}
+                })
+                .catch(function () {});
             })();
             """#
 

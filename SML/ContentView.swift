@@ -426,17 +426,17 @@ struct ContentView: View {
             return [
                 .init(
                     tab: .left1,
-                    systemImage: "person.crop.circle",
+                    systemImage: "house",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/account/",
+                    url: "https://stmaryslandscaping.ca/",
                     token: left1Token,
                     command: left1Command
                 ),
                 .init(
                     tab: .left2,
-                    systemImage: "plus.square",
+                    systemImage: "checklist",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/create-task/",
+                    url: "https://stmaryslandscaping.ca/tasks-today/",
                     token: left2Token,
                     command: left2Command
                 ),
@@ -450,9 +450,9 @@ struct ContentView: View {
                 ),
                 .init(
                     tab: .right1,
-                    systemImage: "tray.full",
+                    systemImage: "clock.arrow.circlepath",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/all-tasks/",
+                    url: "https://stmaryslandscaping.ca/task-history/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -470,9 +470,9 @@ struct ContentView: View {
                 ),
                 .init(
                     tab: .left2,
-                    systemImage: "plus.square",
+                    systemImage: "checklist",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/create-task/",
+                    url: "https://stmaryslandscaping.ca/tasks-today/",
                     token: left2Token,
                     command: left2Command
                 ),
@@ -486,9 +486,9 @@ struct ContentView: View {
                 ),
                 .init(
                     tab: .right1,
-                    systemImage: "tray.full",
+                    systemImage: "clock.arrow.circlepath",
                     isCenter: false,
-                    url: "https://stmaryslandscaping.ca/all-tasks/",
+                    url: "https://stmaryslandscaping.ca/task-history/",
                     token: right1Token,
                     command: right1Command
                 ),
@@ -679,7 +679,7 @@ struct ContentView: View {
         case .client:     return .right1  // Account
         case .accountant: return .center  // Workday
         case .admin:      return .center  // Workspace
-        case .owner:      return .left1   // Account
+        case .owner:      return .center  // Workday
         case .menager:    return .center  // Workday
         case .guest:      return .left1
         }
@@ -754,22 +754,22 @@ struct ContentView: View {
             }
 
         case .owner:
-            if path.contains("/create-task") {
+            if path.contains("/tasks-today") {
                 return .left2
             } else if path.contains("/account-workday") || path.contains("/workday") {
                 return .center
-            } else if path.contains("/all-tasks") {
+            } else if path.contains("/task-history") {
                 return .right1
             } else {
                 return .left1
             }
 
         case .menager:
-            if path.contains("/create-task") {
+            if path.contains("/tasks-today") {
                 return .left2
             } else if path.contains("/account-workday") {
                 return .center
-            } else if path.contains("/all-tasks") {
+            } else if path.contains("/task-history") {
                 return .right1
             } else {
                 return .left1
@@ -800,7 +800,12 @@ struct ContentView: View {
             case .accountant, .owner, .menager: return .center
             default:                            return .left1
             }
-        case "tasks":   return mode == .worker ? .center : .left1
+        case "tasks":
+            switch mode {
+            case .worker:          return .center
+            case .owner, .menager: return .left2
+            default:               return .left1
+            }
         case "new-request": return (mode == .guest || mode == .client) ? .center : .left1
         case "requests": return mode == .client ? .left2 : .left1
         default:         return .left1
@@ -873,8 +878,8 @@ struct ContentView: View {
     // worker:     left1=home  left2=workday   center=tasks-today  right1=report
     // accountant: left1=home  left2=billing   center=workday      right1=payroll
     // admin:      left1=home  left2=create    center=workspace    right1=all-tasks
-    // owner:      left1=acct  left2=create    center=workday      right1=all-tasks
-    // menager:    left1=home  left2=create    center=workday      right1=all-tasks
+    // owner:      left1=home  left2=tasks-today  center=workday    right1=task-history
+    // menager:    left1=home  left2=tasks-today  center=workday    right1=task-history
     // client:     left1=home  left2=requests  center=quote        right1=account
     // guest:      left1=home  left2=account   center=quote        right1=services
     private func widgetTab(for host: String, mode: RoleState.Mode) -> Tab {
@@ -884,8 +889,8 @@ struct ContentView: View {
 
         case "tasks-today":
             switch mode {
-            case .worker:               return .center   // dedicated tasks-today tab
-            case .admin, .owner, .menager: return .right1  // Tasks tab (all-tasks) for staff
+            case .worker:               return .center
+            case .owner, .menager:      return .left2
             default:                    return .left1
             }
 
@@ -901,14 +906,20 @@ struct ContentView: View {
 
         case "all-tasks":
             switch mode {
-            case .admin, .owner, .menager: return .right1
-            default:                       return .left1
+            case .admin: return .right1
+            default:     return .left1
+            }
+
+        case "task-history":
+            switch mode {
+            case .owner, .menager: return .right1
+            default:               return .left1
             }
 
         case "create":
             switch mode {
-            case .admin, .owner, .menager: return .left2
-            default:                       return .left1
+            case .admin: return .left2
+            default:     return .left1
             }
 
         case "billing":
