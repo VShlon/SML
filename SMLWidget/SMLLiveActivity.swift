@@ -77,6 +77,7 @@ struct WorkdayLockScreenView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+        .widgetURL(URL(string: "sml://workday"))
     }
 }
 
@@ -117,9 +118,11 @@ struct WorkdayLiveActivity: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text("St. Marys Landscaping")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                    Link(destination: URL(string: "sml://workday")!) {
+                        Text("St. Marys Landscaping")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             } compactLeading: {
                 Circle()

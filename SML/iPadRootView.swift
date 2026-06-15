@@ -248,17 +248,17 @@ struct iPadRootView: View {
             ]
         case .owner:
             return [
-                .init(id: .left1,  icon: "person.crop.circle",      label: "Account",     url: "https://stmaryslandscaping.ca/account/"),
-                .init(id: .left2,  icon: "plus.square",             label: "Create Task", url: "https://stmaryslandscaping.ca/create-task/"),
-                .init(id: .center, icon: "briefcase",               label: "Workday",     url: "https://stmaryslandscaping.ca/account-workday/"),
-                .init(id: .right1, icon: "tray.full",               label: "All Tasks",   url: "https://stmaryslandscaping.ca/all-tasks/"),
+                .init(id: .left1,  icon: "house",                   label: "Home",         url: "https://stmaryslandscaping.ca/"),
+                .init(id: .left2,  icon: "checklist",               label: "Tasks Today",  url: "https://stmaryslandscaping.ca/tasks-today/"),
+                .init(id: .center, icon: "briefcase",               label: "Workday",      url: "https://stmaryslandscaping.ca/account-workday/"),
+                .init(id: .right1, icon: "clock.arrow.circlepath",  label: "Task History", url: "https://stmaryslandscaping.ca/task-history/"),
             ]
         case .menager:
             return [
-                .init(id: .left1,  icon: "house",                   label: "Home",        url: "https://stmaryslandscaping.ca/"),
-                .init(id: .left2,  icon: "plus.square",             label: "Create Task", url: "https://stmaryslandscaping.ca/create-task/"),
-                .init(id: .center, icon: "briefcase",               label: "Workday",     url: "https://stmaryslandscaping.ca/account-workday/"),
-                .init(id: .right1, icon: "tray.full",               label: "All Tasks",   url: "https://stmaryslandscaping.ca/all-tasks/"),
+                .init(id: .left1,  icon: "house",                   label: "Home",         url: "https://stmaryslandscaping.ca/"),
+                .init(id: .left2,  icon: "checklist",               label: "Tasks Today",  url: "https://stmaryslandscaping.ca/tasks-today/"),
+                .init(id: .center, icon: "briefcase",               label: "Workday",      url: "https://stmaryslandscaping.ca/account-workday/"),
+                .init(id: .right1, icon: "clock.arrow.circlepath",  label: "Task History", url: "https://stmaryslandscaping.ca/task-history/"),
             ]
         }
     }
@@ -279,7 +279,12 @@ struct iPadRootView: View {
     private func widgetTab(for host: String, mode: RoleState.Mode) -> Tab {
         switch host {
         case "home":        return .left1
-        case "tasks-today": return mode == .worker ? .center : .left1
+        case "tasks-today":
+            switch mode {
+            case .worker:          return .center
+            case .owner, .menager: return .left2
+            default:               return .left1
+            }
         case "workday":
             switch mode {
             case .worker:                       return .left2
@@ -289,13 +294,18 @@ struct iPadRootView: View {
         case "workspace":   return mode == .admin ? .center : .left1
         case "all-tasks":
             switch mode {
-            case .admin, .owner, .menager: return .right1
-            default:                       return .left1
+            case .admin: return .right1
+            default:     return .left1
+            }
+        case "task-history":
+            switch mode {
+            case .owner, .menager: return .right1
+            default:               return .left1
             }
         case "create":
             switch mode {
-            case .admin, .owner, .menager: return .left2
-            default:                       return .left1
+            case .admin: return .left2
+            default:     return .left1
             }
         case "billing":     return mode == .accountant ? .left2 : .left1
         case "payroll":     return mode == .accountant ? .right1 : .left1
@@ -338,11 +348,15 @@ struct iPadRootView: View {
             if path.contains("/monthly-billing") { return .left2 }
             if path.contains("/account-workday") { return .center }
             if path.contains("/payroll-review")  { return .right1 }
-        case .admin, .owner, .menager:
+        case .admin:
             if path.contains("/create-task")     { return .left2 }
             if path.contains("/workspace")       { return .center }
             if path.contains("/all-tasks")       { return .right1 }
             if path.contains("/account-workday") { return .center }
+        case .owner, .menager:
+            if path.contains("/tasks-today")     { return .left2 }
+            if path.contains("/account-workday") { return .center }
+            if path.contains("/task-history")    { return .right1 }
         case .client:
             if path.contains("/my-requests")     { return .left2 }
             if path.contains("/new-request")     { return .center }
