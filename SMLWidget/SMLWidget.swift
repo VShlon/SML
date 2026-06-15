@@ -89,10 +89,10 @@ private func tabs(for role: String) -> [WTab] {
         ]
     case "manager":
         return [
-            .init(icon: "house.fill",               label: "Home",      url: smlURL("home")),
-            .init(icon: "plus.square.fill",         label: "Create",    url: smlURL("create")),
-            .init(icon: "calendar",                 label: "Workday",   url: smlURL("workday")),
-            .init(icon: "tray.full",                label: "Tasks",     url: smlURL("all-tasks")),
+            .init(icon: "house.fill",               label: "Home",         url: smlURL("home")),
+            .init(icon: "checklist",                label: "Tasks Today",  url: smlURL("tasks-today")),
+            .init(icon: "briefcase",                label: "Workday",      url: smlURL("workday")),
+            .init(icon: "clock.arrow.circlepath",   label: "Task History", url: smlURL("task-history")),
         ]
     case "administrator":
         return [
@@ -103,10 +103,10 @@ private func tabs(for role: String) -> [WTab] {
         ]
     case "owner":
         return [
-            .init(icon: "house.fill",               label: "Home",      url: smlURL("home")),
-            .init(icon: "plus.square.fill",         label: "Create",    url: smlURL("create")),
-            .init(icon: "calendar",                 label: "Workday",   url: smlURL("workday")),
-            .init(icon: "tray.full",                label: "All Tasks", url: smlURL("all-tasks")),
+            .init(icon: "house.fill",               label: "Home",         url: smlURL("home")),
+            .init(icon: "checklist",                label: "Tasks Today",  url: smlURL("tasks-today")),
+            .init(icon: "briefcase",                label: "Workday",      url: smlURL("workday")),
+            .init(icon: "clock.arrow.circlepath",   label: "Task History", url: smlURL("task-history")),
         ]
     case "client":
         return [
