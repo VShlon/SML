@@ -1302,6 +1302,23 @@ extension WebView {
                 }
               } catch (e) {}
 
+              try {
+                if (!window.__smlSocialInterceptBound) {
+                  window.__smlSocialInterceptBound = true;
+                  document.addEventListener('click', function (ev) {
+                    var btn = ev.target && ev.target.closest ? ev.target.closest('[data-sml-social]') : null;
+                    if (!btn) return;
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                    var provider = btn.getAttribute('data-sml-social');
+                    if (!provider) return;
+                    try {
+                      window.webkit.messageHandlers.smlSocial.postMessage({ provider: provider });
+                    } catch (ex) {}
+                  }, true);
+                }
+              } catch (e) {}
+
               if (window.SML_PUSH_REGISTER && \(shouldRegisterJS)) {
                 try { window.SML_PUSH_REGISTER(); } catch (e) {}
               }
