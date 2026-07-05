@@ -17,6 +17,7 @@
 import SwiftUI
 import WebKit
 import UIKit
+import AuthenticationServices
 
 struct WebNavigationCommand: Equatable {
     let id: UUID
@@ -125,6 +126,7 @@ final class WebViewController: UIViewController {
             wv.configuration.userContentController.add(coordinator, name: "smlWhoami")
             wv.configuration.userContentController.add(coordinator, name: "smlBiometric")
             wv.configuration.userContentController.add(coordinator, name: "smlWidget")
+            wv.configuration.userContentController.add(coordinator, name: "smlSocial")
             wv.configuration.userContentController.add(coordinator, name: "smlLiveActivity")
             wv.configuration.userContentController.add(coordinator, name: "smlConsole")
         }
@@ -208,6 +210,7 @@ extension WebView {
         private var pendingLATokenSandbox: Bool = false
 
         fileprivate var didFinishOnce: Bool = false
+        private var coldStartVersionChecked = false
 
         private let allowedHost = "stmaryslandscaping.ca"
 
@@ -420,6 +423,16 @@ extension WebView {
                 return
             }
 
+            if message.name == "smlSocial" {
+                guard let body = message.body as? [String: Any],
+                      let provider = body["provider"] as? String,
+                      !provider.isEmpty else { return }
+                DispatchQueue.main.async { [weak self] in
+                    self?.handleSocialLogin(provider: provider)
+                }
+                return
+            }
+
             guard message.name == "smlBiometric" else { return }
             guard let dict = message.body as? [String: Any], let action = dict["action"] as? String else { return }
 
@@ -628,6 +641,13 @@ extension WebView {
                 self.startLiveStatusPolling()
                 self.registerForegroundObserverIfNeeded()
                 self.flushPendingLAToken(webView: webView)
+                // On cold start the page loads with useProtocolCachePolicy (fast), but
+                // WKWebView may serve stale CSS/JS from its disk cache. Check the server
+                // version once after the first finish; if it changed, do a hard reload.
+                if !self.coldStartVersionChecked {
+                    self.coldStartVersionChecked = true
+                    self.checkSiteVersionAndReloadIfNeeded(webView: webView, absenceSeconds: .greatestFiniteMagnitude)
+                }
             }
         }
 
@@ -1568,6 +1588,43 @@ extension WebView {
             webView.evaluateJavaScript(js, completionHandler: nil)
         }
 
+        // MARK: - Social Login (ASWebAuthenticationSession)
+
+        private var authSession: ASWebAuthenticationSession?
+
+        @MainActor
+        private func handleSocialLogin(provider: String) {
+            let startURLString = "https://stmaryslandscaping.ca/auth/\(provider)/start/?redirect_to=sml%3A%2F%2Fauth"
+            guard let startURL = URL(string: startURLString) else { return }
+
+            let session = ASWebAuthenticationSession(
+                url: startURL,
+                callbackURLScheme: "sml"
+            ) { [weak self] callbackURL, error in
+                guard let self else { return }
+                guard error == nil,
+                      let callbackURL,
+                      let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
+                      let key = components.queryItems?.first(where: { $0.name == "key" })?.value,
+                      !key.isEmpty else { return }
+                DispatchQueue.main.async {
+                    self.completeAppSocialLogin(key: key)
+                }
+            }
+            session.presentationContextProvider = self
+            session.prefersEphemeralWebBrowserSession = true
+            authSession = session
+            session.start()
+        }
+
+        @MainActor
+        private func completeAppSocialLogin(key: String) {
+            guard let wv = attachedWebView,
+                  let safeKey = key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                  let url = URL(string: "https://stmaryslandscaping.ca/auth/app-complete/?key=\(safeKey)") else { return }
+            wv.load(URLRequest(url: url))
+        }
+
         // Назначение:
         // - Открывает внешний URL через UIApplication
         private func openExternally(_ url: URL) {
@@ -1663,5 +1720,11 @@ extension WebView {
 
             return "\"\""
         }
+    }
+}
+
+extension WebView.Coordinator: ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        hostViewController?.view.window ?? UIWindow()
     }
 }
