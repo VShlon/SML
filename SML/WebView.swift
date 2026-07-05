@@ -593,6 +593,12 @@ extension WebView {
 
             if isExternalURL(u) {
                 if navigationAction.navigationType == .linkActivated || navigationAction.targetFrame == nil {
+                    // If already on an external OAuth page (e.g. Facebook), allow navigation
+                    // so the OAuth flow completes inside WKWebView instead of jumping to Safari.
+                    if let cur = webView.url, isExternalURL(cur) {
+                        decisionHandler(.allow)
+                        return
+                    }
                     openExternally(u)
                     decisionHandler(.cancel)
                     return
@@ -630,6 +636,10 @@ extension WebView {
             }
 
             if isExternalURL(u) {
+                if let cur = attachedWebView?.url, isExternalURL(cur) {
+                    attachedWebView?.load(navigationAction.request)
+                    return nil
+                }
                 openExternally(u)
                 return nil
             }
