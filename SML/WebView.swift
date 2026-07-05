@@ -17,7 +17,6 @@
 import SwiftUI
 import WebKit
 import UIKit
-import AuthenticationServices
 
 struct WebNavigationCommand: Equatable {
     let id: UUID
@@ -426,9 +425,23 @@ extension WebView {
             if message.name == "smlSocial" {
                 guard let body = message.body as? [String: Any],
                       let provider = body["provider"] as? String,
-                      !provider.isEmpty else { return }
-                DispatchQueue.main.async { [weak self] in
-                    self?.handleSocialLogin(provider: provider)
+                      !provider.isEmpty,
+                      let vc = hostViewController,
+                      let wv = attachedWebView else { return }
+                SocialLoginManager.shared.login(provider: provider, from: vc, webView: wv) { result in
+                    switch result {
+                    case .success(let userId, let role):
+                        NSLog("[SML_SOCIAL] logged in userId=%d role=%@", userId, role)
+                    case .failure(let msg):
+                        NSLog("[SML_SOCIAL] error: %@", msg)
+                        DispatchQueue.main.async {
+                            let alert = UIAlertController(title: "Sign-in failed", message: msg, preferredStyle: .alert)
+                            alert.addAction(UIAlertAction(title: "OK", style: .default))
+                            vc.present(alert, animated: true)
+                        }
+                    case .cancelled:
+                        break
+                    }
                 }
                 return
             }
@@ -1588,43 +1601,6 @@ extension WebView {
             webView.evaluateJavaScript(js, completionHandler: nil)
         }
 
-        // MARK: - Social Login (ASWebAuthenticationSession)
-
-        private var authSession: ASWebAuthenticationSession?
-
-        @MainActor
-        private func handleSocialLogin(provider: String) {
-            let startURLString = "https://stmaryslandscaping.ca/auth/\(provider)/start/?redirect_to=sml%3A%2F%2Fauth"
-            guard let startURL = URL(string: startURLString) else { return }
-
-            let session = ASWebAuthenticationSession(
-                url: startURL,
-                callbackURLScheme: "sml"
-            ) { [weak self] callbackURL, error in
-                guard let self else { return }
-                guard error == nil,
-                      let callbackURL,
-                      let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-                      let key = components.queryItems?.first(where: { $0.name == "key" })?.value,
-                      !key.isEmpty else { return }
-                DispatchQueue.main.async {
-                    self.completeAppSocialLogin(key: key)
-                }
-            }
-            session.presentationContextProvider = self
-            session.prefersEphemeralWebBrowserSession = true
-            authSession = session
-            session.start()
-        }
-
-        @MainActor
-        private func completeAppSocialLogin(key: String) {
-            guard let wv = attachedWebView,
-                  let safeKey = key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                  let url = URL(string: "https://stmaryslandscaping.ca/auth/app-complete/?key=\(safeKey)") else { return }
-            wv.load(URLRequest(url: url))
-        }
-
         // Назначение:
         // - Открывает внешний URL через UIApplication
         private func openExternally(_ url: URL) {
@@ -1723,8 +1699,3 @@ extension WebView {
     }
 }
 
-extension WebView.Coordinator: ASWebAuthenticationPresentationContextProviding {
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        hostViewController?.view.window ?? UIWindow()
-    }
-}
