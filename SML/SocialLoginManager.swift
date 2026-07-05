@@ -36,6 +36,9 @@ final class SocialLoginManager: NSObject {
     private var appleAuthController: ASAuthorizationController?
     private var webAuthSession: ASWebAuthenticationSession?
 
+    // Used by loginLink(apple) to pass the link token into the Apple delegate callback.
+    private var pendingLinkToken: String?
+
     private override init() {}
 
     func login(provider: String,
@@ -52,6 +55,106 @@ final class SocialLoginManager: NSObject {
         case "facebook": loginWithWebOAuth(provider: "facebook")
         default:
             completion(.failure("Unknown provider: \(provider)"))
+        }
+    }
+
+    // MARK: - Link social provider to existing account (from account-details page)
+
+    func loginLink(provider: String,
+                   from vc: UIViewController,
+                   webView: WKWebView,
+                   completion: @escaping (SocialLoginResult) -> Void) {
+        self.presentingViewController = vc
+        self.webView = webView
+        self.onComplete = completion
+
+        // Copy WKWebView auth cookies to HTTPCookieStorage.shared so URLSession
+        // can authenticate the link-token request against WordPress.
+        copyWKCookiesToShared(webView: webView) { [weak self] in
+            guard let self else { return }
+            self.fetchLinkToken(provider: provider) { [weak self] token in
+                guard let self else { return }
+                guard let token else {
+                    self.finish(.failure("Could not get link token. Make sure you are signed in."))
+                    return
+                }
+                if provider == "apple" {
+                    self.pendingLinkToken = token
+                    DispatchQueue.main.async { self.loginWithApple() }
+                } else {
+                    self.startLinkOAuth(provider: provider, linkToken: token)
+                }
+            }
+        }
+    }
+
+    // Copy cookies from WKWebView's isolated store into HTTPCookieStorage.shared
+    // so subsequent URLSession requests carry the WordPress auth cookie.
+    private func copyWKCookiesToShared(webView: WKWebView, completion: @escaping () -> Void) {
+        webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+            for cookie in cookies where cookie.domain.lowercased().contains("stmaryslandscaping") {
+                HTTPCookieStorage.shared.setCookie(cookie)
+            }
+            DispatchQueue.main.async { completion() }
+        }
+    }
+
+    // POST admin-ajax.php?action=sml_get_link_token using the WordPress auth cookie
+    // (already in HTTPCookieStorage.shared from copyWKCookiesToShared).
+    private func fetchLinkToken(provider: String, completion: @escaping (String?) -> Void) {
+        guard let url = URL(string: "\(siteBase)/wp-admin/admin-ajax.php") else {
+            completion(nil); return
+        }
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        let encoded = provider.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? provider
+        req.httpBody = "action=sml_get_link_token&provider=\(encoded)".data(using: .utf8)
+
+        URLSession.shared.dataTask(with: req) { data, _, error in
+            guard let data, error == nil,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let success = json["success"] as? Bool, success,
+                  let inner = json["data"] as? [String: Any],
+                  let token = inner["token"] as? String else {
+                completion(nil); return
+            }
+            completion(token)
+        }.resume()
+    }
+
+    // Launch ASWebAuthenticationSession for Google/Facebook link flow.
+    // Server's sml_social_start() reads link_token, sets intent=link + link_uid cookie,
+    // and sml_social_link_to_current_user() redirects to sml://auth-link?provider=PROVIDER.
+    private func startLinkOAuth(provider: String, linkToken: String) {
+        let encodedRedirect = "sml://auth-link".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "sml://auth-link"
+        let encodedToken = linkToken.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? linkToken
+        let startURLString = "\(siteBase)/auth/\(provider)/start/?redirect_to=\(encodedRedirect)&link_token=\(encodedToken)"
+        guard let authURL = URL(string: startURLString) else {
+            finish(.failure("Invalid link auth URL for \(provider)"))
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let session = ASWebAuthenticationSession(url: authURL, callbackURLScheme: "sml") { [weak self] callbackURL, error in
+                guard let self else { return }
+                if let error = error as? ASWebAuthenticationSessionError {
+                    self.finish(error.code == .canceledLogin ? .cancelled : .failure(error.localizedDescription))
+                    return
+                }
+                if let error { self.finish(.failure(error.localizedDescription)); return }
+                // Reload account-details so the Connected accounts section refreshes.
+                let reloadURL = URL(string: "\(self.siteBase)/account-details/")
+                DispatchQueue.main.async { [weak self] in
+                    if let url = reloadURL { self?.webView?.load(URLRequest(url: url)) }
+                }
+                self.finish(.success(userId: 0, role: ""))
+            }
+            session.presentationContextProvider = self
+            session.prefersEphemeralWebBrowserSession = false
+            self.webAuthSession = session
+            session.start()
         }
     }
 
@@ -135,6 +238,13 @@ final class SocialLoginManager: NSObject {
     // MARK: - Apple native token -> server
 
     private func sendAppleTokenToServer(token: String, name: String?) {
+        // If pendingLinkToken is set, this is a link-account call, not a login.
+        if let linkToken = pendingLinkToken {
+            pendingLinkToken = nil
+            linkAppleAccount(appleToken: token, linkToken: linkToken)
+            return
+        }
+
         guard let url = URL(string: "\(siteBase)/wp-json/sml/v1/app-social-login") else {
             finish(.failure("Invalid API URL"))
             return
@@ -167,6 +277,42 @@ final class SocialLoginManager: NSObject {
             self.transferCookiesToWebView {
                 self.finish(.success(userId: userId, role: role))
             }
+        }.resume()
+    }
+
+    // MARK: - Apple link account
+
+    private func linkAppleAccount(appleToken: String, linkToken: String) {
+        guard let url = URL(string: "\(siteBase)/wp-json/sml/v1/app-link-apple") else {
+            finish(.failure("Invalid Apple link URL"))
+            return
+        }
+
+        let body: [String: String] = ["token": appleToken, "link_token": linkToken]
+
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: req) { [weak self] data, _, error in
+            guard let self else { return }
+            if let error { self.finish(.failure(error.localizedDescription)); return }
+
+            guard let data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let ok = json["ok"] as? Bool, ok else {
+                let msg = (try? JSONSerialization.jsonObject(with: data ?? Data()) as? [String: Any])?["message"] as? String
+                self.finish(.failure(msg ?? "Apple link failed"))
+                return
+            }
+
+            let reloadURL = URL(string: "\(self.siteBase)/account-details/")
+            DispatchQueue.main.async { [weak self] in
+                if let url = reloadURL { self?.webView?.load(URLRequest(url: url)) }
+            }
+            self.finish(.success(userId: 0, role: ""))
         }.resume()
     }
 

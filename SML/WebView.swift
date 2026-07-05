@@ -441,19 +441,38 @@ extension WebView {
                       !provider.isEmpty,
                       let vc = hostViewController,
                       let wv = attachedWebView else { return }
-                SocialLoginManager.shared.login(provider: provider, from: vc, webView: wv) { result in
-                    switch result {
-                    case .success(let userId, let role):
-                        NSLog("[SML_SOCIAL] logged in userId=%d role=%@", userId, role)
-                    case .failure(let msg):
-                        NSLog("[SML_SOCIAL] error: %@", msg)
-                        DispatchQueue.main.async {
-                            let alert = UIAlertController(title: "Sign-in failed", message: msg, preferredStyle: .alert)
-                            alert.addAction(UIAlertAction(title: "OK", style: .default))
-                            vc.present(alert, animated: true)
+                let intent = (body["intent"] as? String) ?? "login"
+                if intent == "link" {
+                    SocialLoginManager.shared.loginLink(provider: provider, from: vc, webView: wv) { result in
+                        switch result {
+                        case .success:
+                            NSLog("[SML_SOCIAL] linked provider=%@", provider)
+                        case .failure(let msg):
+                            NSLog("[SML_SOCIAL] link error: %@", msg)
+                            DispatchQueue.main.async {
+                                let alert = UIAlertController(title: "Connect failed", message: msg, preferredStyle: .alert)
+                                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                                vc.present(alert, animated: true)
+                            }
+                        case .cancelled:
+                            break
                         }
-                    case .cancelled:
-                        break
+                    }
+                } else {
+                    SocialLoginManager.shared.login(provider: provider, from: vc, webView: wv) { result in
+                        switch result {
+                        case .success(let userId, let role):
+                            NSLog("[SML_SOCIAL] logged in userId=%d role=%@", userId, role)
+                        case .failure(let msg):
+                            NSLog("[SML_SOCIAL] error: %@", msg)
+                            DispatchQueue.main.async {
+                                let alert = UIAlertController(title: "Sign-in failed", message: msg, preferredStyle: .alert)
+                                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                                vc.present(alert, animated: true)
+                            }
+                        case .cancelled:
+                            break
+                        }
                     }
                 }
                 return
@@ -1324,8 +1343,9 @@ extension WebView {
                     ev.stopImmediatePropagation();
                     var provider = btn.getAttribute('data-sml-social');
                     if (!provider) return;
+                    var intent = btn.getAttribute('data-sml-intent') || 'login';
                     try {
-                      window.webkit.messageHandlers.smlSocial.postMessage({ provider: provider });
+                      window.webkit.messageHandlers.smlSocial.postMessage({ provider: provider, intent: intent });
                     } catch (ex) {}
                   }, true);
                 }
