@@ -573,18 +573,11 @@ extension WebView {
             }
 
             if isExternalURL(u) {
-                // If WKWebView is already showing an external page (e.g. Google/Facebook OAuth),
-                // allow all navigation from it so the OAuth flow stays inside the app.
-                if let currentURL = webView.url, isExternalURL(currentURL) {
-                    decisionHandler(.allow)
-                    return
-                }
                 if navigationAction.navigationType == .linkActivated || navigationAction.targetFrame == nil {
                     openExternally(u)
                     decisionHandler(.cancel)
                     return
                 }
-
                 decisionHandler(.allow)
                 return
             }
@@ -614,12 +607,6 @@ extension WebView {
 
             if scheme == "tel" || scheme == "mailto" || scheme == "sms" || scheme == "facetime" || scheme == "facetime-audio" {
                 openExternally(u)
-                return nil
-            }
-
-            // If already on an external page (OAuth flow), load popup in current view
-            if let currentURL = webView.url, isExternalURL(currentURL) {
-                attachedWebView?.load(navigationAction.request)
                 return nil
             }
 
