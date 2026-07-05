@@ -152,9 +152,7 @@ final class SocialLoginManager: NSObject {
                 self.finish(.success(userId: 0, role: ""))
             }
             session.presentationContextProvider = self
-            // Link flow uses an ephemeral session so Facebook/Google don't try to
-            // reuse an existing Safari authorization and hit a state conflict.
-            session.prefersEphemeralWebBrowserSession = true
+            session.prefersEphemeralWebBrowserSession = false
             self.webAuthSession = session
             session.start()
         }
