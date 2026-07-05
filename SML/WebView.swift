@@ -97,6 +97,19 @@ final class WebViewController: UIViewController {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
 
+        // Clear disk/memory cache on every launch so HTML is always fresh.
+        // Without this WKWebView serves stale cached pages that may not have
+        // the social login JS intercept, causing OAuth buttons to open Safari.
+        let cacheTypes: Set<String> = [
+            WKWebsiteDataTypeDiskCache,
+            WKWebsiteDataTypeMemoryCache,
+        ]
+        WKWebsiteDataStore.default().removeData(
+            ofTypes: cacheTypes,
+            modifiedSince: .distantPast,
+            completionHandler: {}
+        )
+
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.translatesAutoresizingMaskIntoConstraints = false
 
