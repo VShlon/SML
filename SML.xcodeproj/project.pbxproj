@@ -372,7 +372,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = stmaryslandscaping.ca.SML.widget;
 				PRODUCT_NAME = SMLWidget;
 				SDKROOT = iphoneos;
@@ -526,7 +526,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.6;
 				NEW_SETTING = "";
 				NEW_SETTING1 = "";
 				PRODUCT_BUNDLE_IDENTIFIER = stmaryslandscaping.ca.SML;
@@ -562,7 +562,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.6;
 				NEW_SETTING = "";
 				NEW_SETTING1 = "";
 				PRODUCT_BUNDLE_IDENTIFIER = stmaryslandscaping.ca.SML;
@@ -589,7 +589,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = stmaryslandscaping.ca.SML.widget;
 				PRODUCT_NAME = SMLWidget;
 				SDKROOT = iphoneos;

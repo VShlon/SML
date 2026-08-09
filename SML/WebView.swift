@@ -2,7 +2,7 @@
 //  WebView.swift
 //  SML
 //
-//  Version: 1.0.4
+//  Version: 1.0.6
 //  Author: Nuvren.com
 //
 //  Назначение:
@@ -210,6 +210,7 @@ extension WebView {
 
         fileprivate var didFinishOnce: Bool = false
         private var coldStartVersionChecked = false
+        private var offlineRetryURLs: Set<String> = []
 
         private let allowedHost = "stmaryslandscaping.ca"
 
@@ -646,12 +647,36 @@ extension WebView {
         }
 
         // Назначение:
-        // - Логирует ошибки предварительной навигации
+        // - При сетевой ошибке делает один повторный запрос с returnCacheDataElseLoad,
+        //   давая Service Worker 300ms чтобы активироваться и отдать страницу из кэша.
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             let ns = error as NSError
             if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
                 return
             }
+
+            let offlineCodes = [
+                NSURLErrorNotConnectedToInternet,
+                NSURLErrorNetworkConnectionLost,
+                NSURLErrorCannotFindHost,
+                NSURLErrorCannotConnectToHost,
+                NSURLErrorDNSLookupFailed,
+                NSURLErrorTimedOut,
+            ]
+            if ns.domain == NSURLErrorDomain,
+               offlineCodes.contains(ns.code),
+               let failedURL = ns.userInfo[NSURLErrorFailingURLErrorKey] as? URL {
+                let key = failedURL.absoluteString
+                if !offlineRetryURLs.contains(key) {
+                    offlineRetryURLs.insert(key)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak webView] in
+                        webView?.load(URLRequest(url: failedURL, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 60))
+                    }
+                    return
+                }
+                offlineRetryURLs.remove(key)
+            }
+
             print("WEBVIEW didFailProvisionalNavigation:", error.localizedDescription)
         }
 
@@ -666,6 +691,7 @@ extension WebView {
         // - После завершения загрузки синхронизирует bridge, cookies и whoami
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             didFinishOnce = true
+            if let url = webView.url?.absoluteString { offlineRetryURLs.remove(url) }
             NSLog("[didFinish] url=\(webView.url?.absoluteString ?? "nil")")
 
             DispatchQueue.main.async { [weak self, weak webView] in
