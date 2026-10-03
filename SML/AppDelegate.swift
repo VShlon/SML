@@ -20,6 +20,10 @@ import BackgroundTasks
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
+    // One app-wide foreground event. WebView instances must not each start their
+    // own network refresh when a user returns to the app.
+    private var enteredBackgroundAt: Date?
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -45,6 +49,24 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         refreshPushRegistrationIfAuthorized(application: application)
+
+        let absence = enteredBackgroundAt.map { Date().timeIntervalSince($0) } ?? 0
+        enteredBackgroundAt = nil
+
+        // This is the single source of truth for the widget and Live Activity
+        // after foregrounding. It is intentionally asynchronous: the retained
+        // WebView stays visible while the status is reconciled in the background.
+        SMLBackgroundRefresh.refreshIfNeeded(minimumInterval: 2)
+        NotificationCenter.default.post(
+            name: .smlAppForegroundRefresh,
+            object: nil,
+            userInfo: ["absenceSeconds": absence]
+        )
+    }
+
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        enteredBackgroundAt = Date()
+        SMLBackgroundRefresh.scheduleNext()
     }
 
     private func registerForPushIfNeeded(application: UIApplication) {

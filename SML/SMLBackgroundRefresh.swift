@@ -20,12 +20,19 @@ import BackgroundTasks
 import WidgetKit
 import Foundation
 
+extension Notification.Name {
+    static let smlAppForegroundRefresh = Notification.Name("smlAppForegroundRefresh")
+}
+
 enum SMLBackgroundRefresh {
 
     static let taskId        = "ca.stmaryslandscaping.app.widget-refresh"
     static let minIntervalS  = 15.0 * 60   // iOS will not fire sooner than this
 
     private static let liveStatusURL = URL(string: "https://stmaryslandscaping.ca/wp-json/sml/v1/live-status")!
+    private static let refreshLock = NSLock()
+    private static var isRefreshing = false
+    private static var lastRefreshAt: TimeInterval = 0
 
     // MARK: - Registration (call once in AppDelegate.application(_:didFinishLaunchingWithOptions:))
 
@@ -136,9 +143,67 @@ enum SMLBackgroundRefresh {
                 orderStatus:   orderStatus
             )
 
+            // The same confirmed server response updates the Live Activity.
+            // This prevents page-level JavaScript in several tabs from racing to
+            // start, pause or end it with different interpretations of a status.
+            if #available(iOS 16.2, *) {
+                let workerName = (json["worker_name"] as? String) ?? ""
+                let startValue = json["adjusted_start"]
+                let adjustedStart = (startValue as? Double)
+                    ?? Double((startValue as? Int) ?? 0)
+                let pauseValue = json["pause_start_unix"]
+                let pauseStart = (pauseValue as? Double)
+                    ?? Double((pauseValue as? Int) ?? 0)
+
+                DispatchQueue.main.async {
+                    switch workdayStatus {
+                    case "open", "active", "paused":
+                        SMLLiveActivityManager.shared.syncWorkday(
+                            workerName: workerName,
+                            adjustedStartUnix: adjustedStart,
+                            status: workdayStatus,
+                            pauseStartUnix: pauseStart
+                        )
+                    default:
+                        SMLLiveActivityManager.shared.endWorkday()
+                    }
+                }
+            }
+
             NSLog("[BGRefresh] widget updated: role=%@ tasks=%d status=%@", role, taskCount, workdayStatus)
             completion?(true)
         }.resume()
+    }
+
+    /// Coalesces app-level refreshes. Several retained web tabs may finish loading
+    /// together, but they must result in one live-status request, not a request burst.
+    static func refreshIfNeeded(minimumInterval: TimeInterval = 10, completion: ((Bool) -> Void)? = nil) {
+        let now = Date().timeIntervalSince1970
+        refreshLock.lock()
+        let shouldFetch = !isRefreshing && (now - lastRefreshAt >= minimumInterval)
+        if shouldFetch {
+            isRefreshing = true
+            lastRefreshAt = now
+        }
+        refreshLock.unlock()
+
+        guard shouldFetch else {
+            completion?(false)
+            return
+        }
+
+        fetchAndWrite { success in
+            refreshLock.lock()
+            isRefreshing = false
+            // A launch-time request can run before WKWebView has copied its
+            // authenticated cookie. Do not make the page wait for the throttle
+            // in that case; its first completed navigation may retry at once.
+            if !success {
+                lastRefreshAt = 0
+            }
+            refreshLock.unlock()
+            completion?(success)
+        }
     }
 
     // MARK: - Task handler

@@ -231,8 +231,6 @@ extension WebView {
         private weak var locationWebView: WKWebView?
 
         deinit {
-            liveStatusTimer?.invalidate()
-            liveStatusTimer = nil
             NotificationCenter.default.removeObserver(self)
             if isWatchingLocation {
                 LocationBridge.shared.stopWatching()
@@ -703,10 +701,10 @@ extension WebView {
                 self.requestWhoamiViaWebView(webView: webView)
                 self.maybePersistPendingLoginAfterSuccessfulNavigation(webView: webView)
                 self.handleLocationTracking(webView: webView)
-                self.requestLiveStatusSync(webView: webView)
                 self.lastPageLoadAt = Date().timeIntervalSince1970
-                self.startLiveStatusPolling()
                 self.registerForegroundObserverIfNeeded()
+                // Status is fetched once per app, not once per retained tab.
+                SMLBackgroundRefresh.refreshIfNeeded()
                 self.flushPendingLAToken(webView: webView)
                 // On cold start the page loads with useProtocolCachePolicy (fast), but
                 // WKWebView may serve stale CSS/JS from its disk cache. Check the server
@@ -785,10 +783,6 @@ extension WebView {
         private let liveStatusMinInterval: TimeInterval = 10
         private let liveStatusURL = URL(string: "https://stmaryslandscaping.ca/wp-json/sml/v1/live-status")!
 
-        // Background timer: polls live-status every 30 s so the Live Activity ends
-        // even when the user stays on the same page without navigating.
-        private var liveStatusTimer: Timer?
-
         // Tracks when the page was last fully loaded, to decide whether a
         // foreground-return should trigger a full reload or just a live-status sync.
         private var lastPageLoadAt: TimeInterval = 0
@@ -796,87 +790,30 @@ extension WebView {
         // How long the app must be in the background before we do a full reload.
         private let foregroundReloadMinInterval: TimeInterval = 300 // 5 minutes
 
-        private func startLiveStatusPolling() {
-            guard liveStatusTimer == nil else { return }
-            liveStatusTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    guard let wv = self.attachedWebView else {
-                        NSLog("[LiveSync] timer fired - no attached webView, skipping")
-                        return
-                    }
-                    NSLog("[LiveSync] timer fired - requesting sync")
-                    self.requestLiveStatusSync(webView: wv)
-                }
-            }
-        }
-
         private var foregroundObserverRegistered = false
-
-        // Records when the app last went to background so we can calculate
-        // how long it was absent before returning to foreground.
-        private var lastBackgroundAt: TimeInterval = 0
 
         private func registerForegroundObserverIfNeeded() {
             guard !foregroundObserverRegistered else { return }
             foregroundObserverRegistered = true
             NotificationCenter.default.addObserver(
                 self,
-                selector: #selector(appWillEnterForeground),
-                name: UIApplication.willEnterForegroundNotification,
-                object: nil
-            )
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(appDidEnterBackground),
-                name: UIApplication.didEnterBackgroundNotification,
+                selector: #selector(appDidBecomeActive(_:)),
+                name: .smlAppForegroundRefresh,
                 object: nil
             )
         }
 
-        @objc private func appDidEnterBackground() {
-            lastBackgroundAt = Date().timeIntervalSince1970
-        }
-
-        // Prevents double-reload when both time threshold and version change fire together.
+        // Prevents duplicate reload when a version change is observed.
         private var foregroundReloadTriggered = false
 
-        // Called when the app returns to foreground.
-        // 1. Always syncs live-status (widget + Livestroka).
-        // 2. Always checks site version - reloads if version changed on server.
-        // 3. Also reloads if app was in background for 5+ minutes (time-based).
-        @objc private func appWillEnterForeground() {
-            // Immediately refresh the widget via a direct HTTP fetch (no WKWebView needed).
-            // This runs before any WebView check so the widget updates even if the WebView
-            // is not ready yet (cold start, slow load, etc.).
-            SMLBackgroundRefresh.fetchAndWrite()
-
+        // Called once by AppDelegate. There is deliberately no time-based page
+        // reload: retaining the warm WKWebView is what makes short background
+        // returns instant. A reload remains only for a confirmed site deployment.
+        @objc private func appDidBecomeActive(_ notification: Notification) {
             guard let wv = attachedWebView else { return }
-            let now = Date().timeIntervalSince1970
             foregroundReloadTriggered = false
-
-            // Reset the live-status throttle so the foreground call is never skipped.
-            lastLiveStatusAt = 0
-            requestLiveStatusSync(webView: wv)
-
-            // Version check: reload only if absent 60+ seconds (avoids disrupting
-        // workers who briefly switch apps and come right back).
-        let absenceSeconds = lastBackgroundAt > 0 ? (now - lastBackgroundAt) : 0
-        checkSiteVersionAndReloadIfNeeded(webView: wv, absenceSeconds: absenceSeconds)
-
-            // Time-based reload: if absent 5+ minutes, reload with default cache policy
-            // so CSS/JS are served from WKWebView cache (fast). Only a version change
-            // (handled by checkSiteVersionAndReloadIfNeeded above) triggers a full
-            // cache-busting reload to pick up new site deployments.
-            if lastPageLoadAt > 0 && (now - lastPageLoadAt) >= foregroundReloadMinInterval {
-                let host = (wv.url?.host ?? "").lowercased()
-                if (host == allowedHost || host.hasSuffix("." + allowedHost)),
-                   let currentURL = wv.url {
-                    NSLog("[Foreground] reloading page after long background: \(currentURL)")
-                    foregroundReloadTriggered = true
-                    wv.load(URLRequest(url: currentURL, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 60))
-                }
-            }
+            let absenceSeconds = (notification.userInfo?["absenceSeconds"] as? TimeInterval) ?? 0
+            checkSiteVersionAndReloadIfNeeded(webView: wv, absenceSeconds: absenceSeconds)
         }
 
         // MARK: - Site version check
@@ -987,7 +924,7 @@ extension WebView {
                   }
 
                   var ws = d.workday_status;
-                  if (ws === 'open' || ws === 'paused') {
+                  if (ws === 'open' || ws === 'active' || ws === 'paused') {
                     b.smlLiveActivity.postMessage({
                       action:        'workday.sync',
                       workerName:    d.worker_name     || '',
@@ -1770,4 +1707,3 @@ extension WebView {
         }
     }
 }
-
