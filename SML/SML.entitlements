@@ -6,6 +6,7 @@
 	<string>development</string>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:stmaryslandscaping.ca</string>
 		<string>webcredentials:stmaryslandscaping.ca</string>
 	</array>
 	<key>com.apple.developer.applesignin</key>

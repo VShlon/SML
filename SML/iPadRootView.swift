@@ -32,6 +32,7 @@ struct iPadRootView: View {
     @State private var mainWindowPage: MainWindowPage?   = nil
     @State private var suppressReload  = false
     @State private var needsHomeRefreshAfterExternal = false
+    @State private var pendingUniversalLink: URL? = nil
 
     private let brand = Color(red: 67 / 255.0, green: 130 / 255.0, blue: 57 / 255.0)
 
@@ -55,13 +56,21 @@ struct iPadRootView: View {
             let items = sidebarItems(for: roleState.mode)
             if selectedItem == nil { selectedItem = items.first }
         }
-        .onChange(of: roleState.mode) { _, _ in
+        .onChange(of: roleState.mode) { oldMode, newMode in
             let items = sidebarItems(for: roleState.mode)
             tokens = Self.defaultTokens()
             selectedItem = items.first
+            if oldMode == .guest, newMode != .guest, let url = pendingUniversalLink {
+                pendingUniversalLink = nil
+                applyUniversalLink(url)
+            }
         }
         .onOpenURL { url in
-            handleWidgetURL(url)
+            handleIncomingURL(url)
+        }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            guard let url = activity.webpageURL else { return }
+            handleIncomingURL(url)
         }
         .onReceive(push.$openCommand) { cmd in
             guard let cmd else { return }
@@ -264,6 +273,38 @@ struct iPadRootView: View {
     }
 
     // MARK: - Widget deep link routing (mirrors ContentView logic)
+
+    private func handleIncomingURL(_ url: URL) {
+        if url.scheme?.lowercased() == "sml" {
+            handleWidgetURL(url)
+            return
+        }
+
+        guard isSMLWebsiteURL(url) else { return }
+        if roleState.mode == .guest { pendingUniversalLink = url }
+        applyUniversalLink(url)
+    }
+
+    private func isSMLWebsiteURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), ["https", "http"].contains(scheme) else {
+            return false
+        }
+        let host = url.host?.lowercased()
+        return host == "stmaryslandscaping.ca" || host == "www.stmaryslandscaping.ca"
+    }
+
+    private func applyUniversalLink(_ url: URL) {
+        let items = sidebarItems(for: roleState.mode)
+        var targetTab = pushTab(for: url.path.lowercased(), mode: roleState.mode)
+        if targetTab == .left1,
+           (roleState.mode == .guest || roleState.mode == .client),
+           url.path != "/" {
+            targetTab = .right1
+        }
+        guard let item = items.first(where: { $0.id == targetTab }) else { return }
+        commands[item.id] = WebNavigationCommand(id: UUID(), url: url)
+        selectedItem = item
+    }
 
     private func handleWidgetURL(_ url: URL) {
         guard url.scheme == "sml" else { return }

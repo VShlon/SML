@@ -54,6 +54,7 @@ struct ContentView: View {
     @State private var needsHomeRefreshAfterExternal: Bool = false
     @State private var pendingSiriRoute: String? = nil
     @State private var pendingWidgetRoute: String? = nil
+    @State private var pendingUniversalLink: URL? = nil
 
     private let allowedHost = "stmaryslandscaping.ca"
 
@@ -109,6 +110,15 @@ struct ContentView: View {
                 return
             }
 
+            // A Universal Link can arrive before the signed-in role has loaded.
+            // Reapply the exact URL after the role is known so it opens in the
+            // correct tab instead of being replaced by that tab's root page.
+            if oldMode == .guest, newMode != .guest, let url = pendingUniversalLink {
+                pendingUniversalLink = nil
+                applyUniversalLink(url, mode: newMode)
+                return
+            }
+
             // If a Siri route was stored while the role was still unknown, apply it now.
             if oldMode == .guest, newMode != .guest, let route = pendingSiriRoute {
                 pendingSiriRoute = nil
@@ -147,7 +157,11 @@ struct ContentView: View {
             }
         }
         .onOpenURL { url in
-            routeFromWidget(url, mode: roleState.mode)
+            routeFromIncomingURL(url, mode: roleState.mode)
+        }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            guard let url = activity.webpageURL else { return }
+            routeFromIncomingURL(url, mode: roleState.mode)
         }
         .onReceive(push.$openCommand) { cmd in
             guard let cmd else { return }
@@ -813,6 +827,57 @@ struct ContentView: View {
     }
 
     // MARK: - Widget deep link routing
+
+    private func routeFromIncomingURL(_ url: URL, mode: RoleState.Mode) {
+        if url.scheme?.lowercased() == "sml" {
+            routeFromWidget(url, mode: mode)
+            return
+        }
+
+        guard isSMLWebsiteURL(url) else { return }
+
+        // Load immediately for guests as well, while retaining the URL for a
+        // signed-in session whose role is still being restored.
+        if mode == .guest {
+            pendingUniversalLink = url
+        }
+        applyUniversalLink(url, mode: mode)
+    }
+
+    private func isSMLWebsiteURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), ["https", "http"].contains(scheme) else {
+            return false
+        }
+        let host = url.host?.lowercased()
+        return host == "stmaryslandscaping.ca" || host == "www.stmaryslandscaping.ca"
+    }
+
+    private func applyUniversalLink(_ url: URL, mode: RoleState.Mode) {
+        // The first tab is a native home screen for guests and clients, so it
+        // cannot receive a web navigation command. Use a web-backed tab for
+        // any non-home page that does not have its own tab mapping.
+        var target = targetTab(for: url, mode: mode)
+        if target == .left1,
+           (mode == .guest || mode == .client),
+           url.path != "/" {
+            target = .right1
+        }
+        let command = WebNavigationCommand(id: UUID(), url: url)
+
+        if showMoreSheet { showMoreSheet = false }
+        suppressReloadOnce = true
+
+        switch target {
+        case .left1:  left1Command = command
+        case .left2:  left2Command = command
+        case .center: centerCommand = command
+        case .right1: right1Command = command
+        case .right2: return
+        }
+
+        selected = target
+        lastNonMoreTab = target
+    }
 
     private func routeFromWidget(_ url: URL, mode: RoleState.Mode) {
         guard url.scheme == "sml" else { return }
