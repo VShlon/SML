@@ -63,7 +63,15 @@ struct ContentView: View {
     private let blackUnselected = UIColor(red: 67 / 255.0, green: 130 / 255.0, blue: 57 / 255.0, alpha: 0.35)
 
     var body: some View {
-        TabView(selection: $selected) {
+        // A tap on the tab that is already selected comes through this setter with the
+        // same value: that is the reselect (back to the tab's page, or scroll to the top).
+        TabView(selection: Binding(
+            get: { selected },
+            set: { newTab in
+                if newTab == selected { handleTabReselect(newTab, mode: roleState.mode) }
+                else { selected = newTab }
+            }
+        )) {
 
             ForEach(makeTabs(for: roleState.mode), id: \.tab) { spec in
                 tabBody(spec)
@@ -78,12 +86,6 @@ struct ContentView: View {
                         .labelStyle(.iconOnly)
                 }
         }
-        .background(
-            TabBarReselectDetector { didReselect in
-                handleTabReselect(didReselect, mode: roleState.mode)
-            }
-            .frame(width: 0, height: 0)
-        )
         .sheet(isPresented: $showMoreSheet) {
             SMLMoreRootView()
                 .preferredColorScheme(.light)
@@ -223,22 +225,6 @@ struct ContentView: View {
         if tab == .center && (mode == .guest || mode == .client) {
             return false
         }
-        return true
-    }
-
-    private func shouldResetOnReselect(tab: Tab, mode: RoleState.Mode) -> Bool {
-        if (mode == .guest || mode == .client), tab == .center {
-            return false
-        }
-
-        if mode == .worker, tab == .left2 {
-            return false
-        }
-
-        if tab == .right2 {
-            return false
-        }
-
         return true
     }
 
@@ -593,8 +579,18 @@ struct ContentView: View {
             return
         }
 
-        if shouldResetOnReselect(tab: tab, mode: mode) {
-            resetTabToRoot(tab)
+        // Like Apple apps: on another page the tap goes back to the tab's own page
+        // (same web view, no blank reload); on that page already it scrolls to the top,
+        // so a half filled form is never cleared.
+        guard let spec = makeTabs(for: mode).first(where: { $0.tab == tab }),
+              let root = URL(string: spec.url) else { return }
+        let nav = WebNavigationCommand(id: UUID(), url: root)
+        switch tab {
+        case .left1:  left1Command  = nav
+        case .left2:  left2Command  = nav
+        case .center: centerCommand = nav
+        case .right1: right1Command = nav
+        case .right2: break
         }
     }
 
@@ -1057,84 +1053,6 @@ struct ContentView: View {
             right1Command = nav
         case .right2:
             break
-        }
-    }
-}
-
-
-// MARK: - UIKit bridge для определения reselect
-
-private struct TabBarReselectDetector: UIViewControllerRepresentable {
-
-    let onReselect: (Tab) -> Void
-
-    func makeUIViewController(context: Context) -> UIViewController {
-        let vc = UIViewController()
-        vc.view.backgroundColor = .clear
-        context.coordinator.attach(to: vc)
-        return vc
-    }
-
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-        context.coordinator.attach(to: uiViewController)
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onReselect: onReselect)
-    }
-
-    final class Coordinator: NSObject, UITabBarControllerDelegate {
-
-        private let onReselect: (Tab) -> Void
-        private weak var tabBarController: UITabBarController?
-        private var lastIndex: Int?
-
-        init(onReselect: @escaping (Tab) -> Void) {
-            self.onReselect = onReselect
-        }
-
-        func attach(to vc: UIViewController) {
-            guard tabBarController == nil else { return }
-
-            DispatchQueue.main.async { [weak self, weak vc] in
-                guard let self, let vc else { return }
-
-                var p: UIViewController? = vc
-                while let parent = p?.parent {
-                    if let tbc = parent as? UITabBarController {
-                        self.tabBarController = tbc
-                        tbc.delegate = self
-                        self.lastIndex = tbc.selectedIndex
-                        return
-                    }
-                    p = parent
-                }
-            }
-        }
-
-        func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
-            let idx = tabBarController.selectedIndex
-
-            if let last = lastIndex, last == idx {
-                onReselect(mapIndexToTab(idx))
-            }
-
-            lastIndex = idx
-        }
-
-        private func mapIndexToTab(_ idx: Int) -> Tab {
-            switch idx {
-            case 0:
-                return .left1
-            case 1:
-                return .left2
-            case 2:
-                return .center
-            case 3:
-                return .right1
-            default:
-                return .right2
-            }
         }
     }
 }

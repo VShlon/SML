@@ -2,7 +2,7 @@
 //  WebView.swift
 //  SML
 //
-//  Version: 1.0.6
+//  Version: 1.0.7
 //  Author: Nuvren.com
 //
 //  Назначение:
@@ -89,6 +89,10 @@ final class WebViewController: UIViewController {
 
     private var didLoadInitial = false
 
+    // Pull to refresh, the same as the SMC app (not on forms, so typed data is never lost).
+    private let brandColor = UIColor(red: 67 / 255.0, green: 130 / 255.0, blue: 57 / 255.0, alpha: 1.0)
+    private let refreshControl = UIRefreshControl()
+
     // Назначение:
     // - Создает WKWebView и настраивает его делегаты
     override func viewDidLoad() {
@@ -144,7 +148,42 @@ final class WebViewController: UIViewController {
 
         self.webView = wv
 
+        setupPullToRefresh(on: wv)
+
         loadInitialIfNeeded()
+    }
+
+    // MARK: Pull to refresh
+
+    private func setupPullToRefresh(on wv: WKWebView) {
+        refreshControl.tintColor = brandColor
+        refreshControl.addTarget(self, action: #selector(pullToRefresh), for: .valueChanged)
+        wv.scrollView.refreshControl = refreshControl
+        wv.scrollView.alwaysBounceVertical = true
+    }
+
+    @objc private func pullToRefresh() {
+        guard let wv = webView else { refreshControl.endRefreshing(); return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        if wv.url == nil, let u = initialURL {
+            wv.load(URLRequest(url: u))
+        } else {
+            wv.reload()
+        }
+    }
+
+    // A form page (sign in, new request, any edit screen) has no pull to refresh.
+    fileprivate func pageCommitted(_ url: URL?) {
+        let path = (url?.path ?? "").lowercased()
+        let query = (url?.query ?? "").lowercased()
+        let isForm = path.hasPrefix("/login") || path.hasPrefix("/register") || path.hasPrefix("/request")
+            || path.contains("new-request") || path.contains("add-request") || path.contains("quote")
+            || path.contains("edit") || query.contains("edit")
+        webView?.scrollView.refreshControl = isForm ? nil : refreshControl
+    }
+
+    fileprivate func endRefreshing() {
+        if refreshControl.isRefreshing { refreshControl.endRefreshing() }
     }
 
     // Назначение:
@@ -546,6 +585,10 @@ extension WebView {
             }
 
             if let current = webView.url, urlsEffectivelyEqual(current, cmd.url) {
+                // Already on this page (tab tapped again): scroll to the top instead of reloading.
+                let sv = webView.scrollView
+                let top = CGPoint(x: 0, y: -sv.adjustedContentInset.top)
+                sv.setContentOffset(top, animated: !UIAccessibility.isReduceMotionEnabled)
                 return
             }
 
@@ -635,8 +678,15 @@ extension WebView {
         }
 
         // Назначение:
+        // - Новая страница начала отображаться: включает или выключает pull to refresh
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            hostViewController?.pageCommitted(webView.url)
+        }
+
+        // Назначение:
         // - Логирует ошибки обычной навигации
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            hostViewController?.endRefreshing()
             let ns = error as NSError
             if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
                 return
@@ -648,6 +698,7 @@ extension WebView {
         // - При сетевой ошибке делает один повторный запрос с returnCacheDataElseLoad,
         //   давая Service Worker 300ms чтобы активироваться и отдать страницу из кэша.
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            hostViewController?.endRefreshing()
             let ns = error as NSError
             if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
                 return
@@ -689,6 +740,7 @@ extension WebView {
         // - После завершения загрузки синхронизирует bridge, cookies и whoami
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             didFinishOnce = true
+            hostViewController?.endRefreshing()
             if let url = webView.url?.absoluteString { offlineRetryURLs.remove(url) }
             NSLog("[didFinish] url=\(webView.url?.absoluteString ?? "nil")")
 
